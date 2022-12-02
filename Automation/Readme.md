@@ -22,4 +22,4 @@ Once deployment is complete, you will need to authorize each connection.
 You can now edit the playbook in Azure Logic apps.
 
 ## Suggestions and feedback
-We value your feedback. Let us know if you run into any problems or share your suggestions and feedback to "MD EASM Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com
+We value your feedback. Let us know if you run into any problems or share your suggestions and feedback to MDEASM Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com
