@@ -1,10 +1,12 @@
 # MDEASM: Create ServiceNow Incidents
 
 ## Overview
-Playbook demonstrates automation to create incidents in ServiceNow by filtering on required/monitored digital Assets and vulnerabilities from your MDEASM Inventory.
+Playbook demonstrates automation to create incidents in ServiceNow for select Inventory Assets by querying for certain vulnerabilities or set criteria from your MDEASM Inventory.
 
 ## Prerequisites
-Define Prerequisites.
+MDEASM API in this playbook supports Azure AD Authentication which requires you to have an App registration or Service Principal setup and used for authorization
+Service Now API connection requires authorization using serviceNow instance URL, username and password
+MDEASM filter parameter needs to be set to an appropriate query to query inventory assets. Refer MDEASM API documentation
 
 ## Deployment
 
