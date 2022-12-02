@@ -3,8 +3,6 @@
 ## About
 This repo contains sample playbooks for security automation, orchestration and response (SOAR). Each folder contains a Azure Logic App playbook ARM template using Microsoft Defender External Attack Surface Management (MDEASM) API.
 
-MDEASM API documentation can be found here, https://learn.microsoft.com/en-us/rest/api/defenderforeasm/
-
 ## Instructions for deploying a custom template
 After selecting a playbook, in the Azure portal:
 1. Search for deploy a custom template
@@ -22,6 +20,8 @@ Once deployment is complete, you will need to authorize each connection.
 6. Repeat steps for other connections
 
 You can now edit the playbook in Azure Logic apps.
+
+MDEASM API documentation can be found here, https://learn.microsoft.com/en-us/rest/api/defenderforeasm/
 
 ## Suggestions and feedback
 We value your feedback. Let us know if you run into any problems or share your suggestions and feedback to MDEASM Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com
