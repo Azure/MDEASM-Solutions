@@ -4,9 +4,9 @@
 Playbook demonstrates automation to create incidents in ServiceNow for select Inventory Assets by querying for certain vulnerabilities or set criteria from your MDEASM Inventory.
 
 ## Prerequisites
-1.) MDEASM API in this playbook supports Azure AD Authentication which requires you to have an App registration or Service Principal setup and used for authorization
-2.) ServiceNow API connection requires authorization using serviceNow instance URL, username and password
-3.) MDEASM filter parameter needs to be set to an appropriate query to query inventory assets. Refer MDEASM API documentation
+1. MDEASM API in this playbook supports Azure AD Authentication which requires you to have an App registration or Service Principal setup and used for authorization
+2. ServiceNow API connection requires authorization using serviceNow instance URL, username and password
+3. MDEASM filter parameter needs to be set to an appropriate query to query inventory assets. Refer MDEASM API documentation
 
 ## Deployment
 
