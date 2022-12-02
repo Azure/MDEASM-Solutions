@@ -1,7 +1,9 @@
-<img src="logic_app_logo.png" alt="LogicApps Logo" width="350" height="200">
+<img src="logic_app_logo.png" alt="LogicApps Logo" width="300" height="200">
 
 ## About
-This repo contains sample playbooks for security automation, orchestration and response (SOAR). Each folder contains a Azure Logic App playbook ARM template for Microsoft Defender External Attack Surface Management (MDEASM).
+This repo contains sample playbooks for security automation, orchestration and response (SOAR). Each folder contains a Azure Logic App playbook ARM template using Microsoft Defender External Attack Surface Management (MDEASM) API.
+
+MDEASM API documentation can be found here, https://learn.microsoft.com/en-us/rest/api/defenderforeasm/
 
 ## Instructions for deploying a custom template
 After selecting a playbook, in the Azure portal:
