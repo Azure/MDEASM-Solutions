@@ -50,7 +50,7 @@
 			"location": "[resourceGroup().location]",
 			"properties": {
 				"api": {
-					"id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/onedrive')]"
+					"id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/onedriveforbusiness')]"
 				}
 			}
 		},
@@ -323,7 +323,7 @@
                             "onedrive_1": {
                                 "connectionId": "[resourceId('Microsoft.Web/connections', variables('OnedriveConnectionName'))]",
                                 "connectionName": "[variables('OnedriveConnectionName')]",
-                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/onedrive')]"
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/onedriveforbusiness')]"
                             }
                         }
                     },
