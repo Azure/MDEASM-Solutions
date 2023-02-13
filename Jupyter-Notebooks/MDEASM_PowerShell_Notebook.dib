@@ -1,0 +1,587 @@
+#!meta
+
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"name":"csharp","languageName":"C#","aliases":["c#","C#"]},{"name":"pwsh","languageName":"PowerShell","aliases":["powershell"]},{"name":"vscode","aliases":["frontend"],"languageName":null},{"name":".NET","aliases":[]},{"name":"fsharp","languageName":"F#","aliases":["f#","F#"]},{"name":"html","languageName":"HTML","aliases":[]},{"name":"javascript","languageName":"JavaScript","aliases":["js"]},{"name":"kql","languageName":"KQL","aliases":[]},{"name":"mermaid","languageName":"Mermaid","aliases":[]},{"name":"sql","languageName":"SQL","aliases":[]},{"name":"value","aliases":[]},{"name":"webview","aliases":[]}]}}
+
+#!markdown
+
+## Microsoft Defender for External Attack Surface Management (MDEASM) PowerShell Jupyter Notebook
+***
+This is a sample notebook for querying your MDEASM inventory. A few prerequisites must be completed before you can use it properly:
+1. You must complete an initial __[Discovery](https://learn.microsoft.com/en-us/azure/external-attack-surface-management/using-and-managing-discovery)__ in your MDEASM workspace to which you have, at a minimum, _read_ permissions
+2. You will also need your _Subscription Id_, _Tenant Id_, _Resource Group Name_, _Workspace Name_, & the Azure _Region_ your workspace was initialized in
+3. You must have a registered __[Service Principal](https://learn.microsoft.com/en-us/rest/api/defenderforeasm/authentication#client-service-principal)__ application that is properly configured to interact with our REST API
+4. To create a bearer token with your _Service Principal_ you will need the app _Client Id_, _Client Secret_, & _Tenant Id_ 
+5. A .NET/PowerShell installation with a capable Jupyter module OR and IDE such as VSCode with a Jupyter Notebook extension installed
+***
+
+> Note for simplicity's sake, we are putting the auth variables here in the notebook for demo purposes only. In reality, this should __never__ take place in a document/script you share with others, or publish online. Storage of clientIds and clientSecrets should always leverage a more secure solution such as Key Vaults or encrypted storage of some kind. If you share this notebook with others after usage, clear outputs of all cells and restart your kernel after you have deleted these sensetive variables from your code.
+
+#!pwsh
+
+# Important variables to set
+$Global:bearerToken = $null # This will be set by the azure_auth() function otherwise enter the token as a string in side quotes ''
+$Global:bearerTokenExpires = 0 # This will be set by the azure_auth() function otherwise enter the epoch time in seconds as an integer
+$Global:clientId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Application (client) ID - string [required]
+$Global:clientSecret = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Client secret - string [required]
+$Global:tenantId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Directory (tenant) ID - string [required]
+$Global:subscriptionId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Subscription ID - string [required]
+$Global:resourceGroupName = '' # ex. 'myMDEASMAPItest-rg' => Resource group name - string [required]
+$Global:resourceName = '' # ex. 'myMDEASMworkspace' => Resource/Workspace name - string [required]
+$Global:region = '' # ex. 'eastus' => Region - string [required]
+# Leave these variables unchanged until you need to change them
+$Global:resource = $null # => API Resource - string [supplied]
+$Global:apiVersion = '2022-11-01-preview' # => API Version - string [supplied]
+$Global:maxpagesize = 25 # => Max page size - int [required]
+$Global:mark = '*' # => Mark - string [optional]
+$Global:currentPlane = $null # => Current plane - string [required]
+$Global:AuthURL = $null # => Authentication URL - string [supplied]
+
+# Utility variables
+$uuidRegex = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+$Global:AuthParams = New-Object "System.Collections.Generic.Dictionary[[string],[string]]"
+$Global:AuthParams.Add('clientId', $clientId)
+$Global:AuthParams.Add('clientSecret', $clientSecret)
+$Global:AuthParams.Add('tenantId', $tenantId)
+$Global:AuthParams.Add('bearerToken', $bearerToken)
+$Global:AuthParams.Add('bearerTokenExpires', $bearerTokenExpires)
+
+function AzureAuth {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateSet('data', 'control')]
+        [string]$planeType = 'data'
+    )
+    $planeType = $planeType.ToLower()
+    if ($planeType -eq 'data') {
+        $Global:resource = 'scope=https%3A%2F%2Feasm.defender.microsoft.com%2F.default'
+    } elseif ($planeType -eq 'control') {
+        $Global:resource = 'scope=https%3A%2F%2Fmanagement.azure.com%2F.default'
+    } else {
+        Write-Error 'Invalid plane type'
+    }
+    # Check if the bearer token is still valid
+    if ($bearerToken -and $bearerTokenExpires -gt (Get-Date -AsUTC -UFormat %s) -and $currentPlane -eq $planeType) {
+        $bearerToken = $bearerToken
+        $bearerTokenExpires = $bearerTokenExpires
+    } elseif ($clientId -and $clientSecret -and $tenantId -or $currentPlane -ne $planeType) {
+        # Get the needed bearer token
+        $headers = New-Object "System.Collections.Generic.Dictionary[[String],[String]]"
+        $headers.Add("Content-Type", "application/x-www-form-urlencoded")
+
+        $body = "grant_type=client_credentials&client_id=" + $clientId + "&" + $resource + "&client_secret=" + $clientSecret
+
+        $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Method 'GET' -Headers $headers -Body $body
+
+        $Global:bearerToken = $response.access_token
+        $Global:bearerTokenExpires = (Get-Date -AsUTC -UFormat %s) + $response.expires_in
+        $Global:currentPlane = $planeType
+    } else {
+        Write-Error 'No bearer token or client credentials provided'
+    }
+    #return $bearerToken, $bearerTokenExpires
+}
+
+AzureAuth -planeType 'data'
+if ($bearerToken -and $bearerTokenExpires -gt (Get-Date -AsUTC -UFormat %s)) {
+    Write-Host 'Authentication successful'
+} else {
+    Write-Error 'Authentication failed'
+}
+
+#!markdown
+
+### Assets - List
+
+#!pwsh
+
+# Retrieve a list of assets from a URL encoded query
+function Get-AssetsList {
+    param (
+        [string]$query = '')
+    
+    $query = [System.Web.HttpUtility]::UrlEncode($query)
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    $resultSet = @()
+    $Uri = "https://$region.easm.defender.microsoft.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/workspaces/$resourceName/assets?api-version=$apiVersion&maxpagesize=$maxpagesize&filter=$query&mark=$mark"
+    $Params = @{
+        "Method"="GET"
+        "ContentType"="application/json"
+        "Headers" = @{
+            "User-Agent"="MDEASM PowerShell Notebook"
+            "Authorization" = "Bearer $bearerToken"
+        }
+    }
+
+    $response = (Invoke-RestMethod -Uri $Uri @Params)
+    foreach ($_ in $response.content) {
+        $resultSet += $_.name
+    }
+
+    while ($response.nextLink -ne $null) {
+        AzureAuth -planeType 'data'
+        $response = (Invoke-RestMethod -Uri $response.nextLink.toString() @Params)
+        foreach ($_ in $response.content) {
+            $resultSet += $_.name
+        }
+        $wait = Get-Random -Minimum 0.5 -Maximum 0.95
+        Start-Sleep -Seconds $wait
+    }
+    return $resultSet
+}
+
+#!pwsh
+
+Get-AssetsList -query 'state = confirmed AND kind in ("domain")'
+
+#!markdown
+
+### Assets - Get
+
+#!pwsh
+
+# Get a single asset details related to an assetId
+function Get-Asset {
+    param (
+        [string]$assetId)
+    
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    if ($assetId -match $uuidRegex) {
+        $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/assets/" + $assetId + "?api-version=" + $apiVersion
+        $Params = @{
+            "Method"="GET"
+            "ContentType"="application/json"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+        $response = (Invoke-RestMethod -Uri $Uri @Params)
+        return $response
+    } else {
+        Write-Error "Asset ID $assetId is not a valid GUID"
+    }
+}
+
+#!pwsh
+
+Get-Asset -assetId 'a8c5a9e0-0000-0000-0000-000000000000'
+
+#!markdown
+
+### Assets - Update
+
+#!pwsh
+
+# Assets Update endpoint - requires a URL encoded query string
+#   and a post body containing the asset properties to update 
+#   example post body: '{"labels": {"Label1": True}, "state": "confirmed", "transfers":["sslCert"], "externalId": "123456"}'
+#   accepted transfers values: contact, domain, ipBlock, host, page, sslCert, as, ipAddress
+function Update-Assets {
+    param(
+        [string]$query,
+        [string]$updateBody)
+
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    $query = [System.Web.HttpUtility]::UrlEncode($query)
+
+    $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/assets?filter=" + $query + "&api-version=" + $apiVersion
+    $payload = $updateBody
+    $Params = @{
+            "Method"="PATCH"
+            "ContentType"="application/json"
+            "Body"=$payload
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+$query = 'state = confirmed AND domain in ("example.com")'
+$updateBody = '{"labels": {"label1": "True"}}'
+Update-Assets -query $query -updateBody $updateBody
+
+#!markdown
+
+### Tasks - Get
+
+#!pwsh
+
+# Retrieves a single task by taskId
+function Get-Task {
+    param (
+        [string]$taskId)
+    
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    if ($taskId -match $uuidRegex) {
+        $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks/" + $taskId + "?api-version=" + $apiVersion
+        $Params = @{
+            "Method"="GET"
+            "ContentType"="application/json"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+        $response = (Invoke-RestMethod -Uri $Uri @Params)
+        return $response
+    } else {
+        Write-Error "Task ID $taskId is not a valid GUID"
+    }
+}
+
+#!pwsh
+
+Get-Task -taskId 'a8c5a9e0-0000-0000-0000-000000000000'
+
+#!markdown
+
+### Tasks - List
+
+#!pwsh
+
+# Retrieves a list of tasks by workspace name
+function Get-TaskList {    
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks?api-version=" + $apiVersion
+    $Params = @{
+        "Method"="GET"
+        "ContentType"="application/json"
+        "Headers" = @{
+            "User-Agent"="MDEASM PowerShell Notebook"
+            "Authorization" = "Bearer $bearerToken"
+        }
+    }
+    $response = (Invoke-RestMethod -Uri $Uri @Params)
+    return $response
+}
+
+#!pwsh
+
+Get-TaskList
+
+#!markdown
+
+### Tasks - Cancel
+
+#!pwsh
+
+# Cancels a single task by taskId
+function Cancel-Task {
+    param (
+        [string]$taskId)
+    
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    if ($taskId -match $uuidRegex) {
+        $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks/" + $taskId + ":cancel?api-version=" + $apiVersion
+        $Params = @{
+            "Method"="GET"
+            "ContentType"="application/json"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+        $response = (Invoke-RestMethod -Uri $Uri @Params)
+        return $response
+    } else {
+        Write-Error "Task ID $taskId is not a valid GUID"
+    }
+}
+
+#!pwsh
+
+Cancel-Task -taskId 'a8c5a9e0-0000-0000-0000-000000000000'
+
+#!markdown
+
+### Helper Functions
+### Get-CommonAssets
+
+#!pwsh
+
+# Retrieve a list of assets from a URL encoded query then identify and count the number of common domains, ipBlocks, and ASNs
+# This function is slow due to the number of API calls required to retrieve the full list of assets
+function Get-CommonAssets {
+    param (
+        [string]$query = '')
+    $query = [System.Web.HttpUtility]::UrlEncode($query)
+    AzureAuth -planeType 'data'
+    $Global:apiVersion = '2022-11-01-preview'
+    $resultSet = @{}
+    $Uri = "https://$region.easm.defender.microsoft.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/workspaces/$resourceName/assets?api-version=$apiVersion&maxpagesize=$maxpagesize&filter=$query&mark=$mark"
+    $Params = @{
+        "Method"="GET"
+        "ContentType"="application/json"
+        "Headers" = @{
+            "User-Agent"="MDEASM PowerShell Notebook"
+            "Authorization" = "Bearer $bearerToken"
+        }
+    }
+
+    $response = (Invoke-RestMethod -Uri $Uri @Params)
+    foreach ($_ in $response.content) {
+        if ($_.kind -eq "host" -or $_.kind -eq "page") {
+            if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
+                $resultSet[$_.asset.domain] += 1
+            } else {
+                $resultSet.Add($_.asset.domain, 1)
+            }
+        } elseif ($_.kind -eq "ipAddress") {
+            if ($_.asset.ipBlocks -ne $null -and $_.asset.ipBlocks.Count -ne 0) {
+                $ipBlocks = Select-Object -InputObject $_.asset -ExpandProperty ipBlocks | Select-Object -Property ipBlock
+                foreach ($ipBlock in $ipBlocks) {
+                    if ([string]$ipBlock -in $resultSet.Keys) {
+                        $resultSet[[string]$ipBlock] += 1
+                    } else {
+                        $resultSet.Add([string]$ipBlock, 1)
+                    }
+                }
+
+            }
+            if ($_.asset.asns -ne $null -and $_.asset.asns.Count -ne 0) {
+                $asns = Select-Object -InputObject $_.asset -ExpandProperty asns | Select-Object -Property value
+                foreach ($asn in $asns) {
+                    if ([string]$asn -in $resultSet.Keys) {
+                        $resultSet[[string]$asn] += 1
+                    } else {
+                        $resultSet.Add([string]$asn, 1)
+                    }
+                }
+            }
+        } elseif ($_.kind -eq "ipBlock") {
+            if ($_.asset.asns -ne $null -and $_.asset.asns.Count -ne 0) {
+                $asns = Select-Object -InputObject $_.asset -ExpandProperty asns | Select-Object -Property value
+                foreach ($asn in $asns) {
+                    if ([string]$asn -in $resultSet.Keys) {
+                        $resultSet[[string]$asn] += 1
+                    } else {
+                        $resultSet.Add([string]$asn, 1)
+                    }
+                }
+            }
+
+        }
+    }
+
+    while ($response.nextLink -ne $null) {
+        AzureAuth -planeType 'data'
+        $response = (Invoke-RestMethod -Uri $response.nextLink.toString() @Params)
+        foreach ($_ in $response.content) {
+            if ($_.kind -eq "host" -or $_.kind -eq "page") {
+                if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
+                    $resultSet[$_.asset.domain] += 1
+                } else {
+                    $resultSet.Add($_.asset.domain, 1)
+                }
+            } elseif ($_.kind -eq "ipAddress") {
+                if ($_.asset.ipBlocks -ne $null -and $_.asset.ipBlocks.Count -ne 0) {
+                    $ipBlocks = Select-Object -InputObject $_.asset -ExpandProperty ipBlocks | Select-Object -Property ipBlock
+                    foreach ($ipBlock in $ipBlocks) {
+                        if ([string]$ipBlock -in $resultSet.Keys) {
+                            $resultSet[[string]$ipBlock] += 1
+                        } else {
+                            $resultSet.Add([string]$ipBlock, 1)
+                        }
+                    }
+
+                }
+                if ($_.asset.asns -ne $null -and $_.asset.asns.Count -ne 0) {
+                    $asns = Select-Object -InputObject $_.asset -ExpandProperty asns | Select-Object -Property value
+                    foreach ($asn in $asns) {
+                        if ([string]$asn -in $resultSet.Keys) {
+                            $resultSet[[string]$asn] += 1
+                        } else {
+                            $resultSet.Add([string]$asn, 1)
+                        }
+                    }
+                }
+            } elseif ($_.kind -eq "ipBlock") {
+                if ($_.asset.asns -ne $null -and $_.asset.asns.Count -ne 0) {
+                    $asns = Select-Object -InputObject $_.asset -ExpandProperty asns | Select-Object -Property value
+                    foreach ($asn in $asns) {
+                        if ([string]$asn -in $resultSet.Keys) {
+                            $resultSet[[string]$asn] += 1
+                        } else {
+                            $resultSet.Add([string]$asn, 1)
+                        }
+                    }
+                }
+            }
+        }
+        $wait = Get-Random -Minimum 0.5 -Maximum 0.95
+        Start-Sleep -Seconds $wait
+    }
+    $results = $resultSet.GetEnumerator() | Sort-Object -Property Value -Descending
+    return $results
+}
+
+#!pwsh
+
+Get-CommonAssets -query 'state = confirmed AND kind in ("host","ipAddress")'
+
+#!markdown
+
+### Control Plane Endpoints
+### Labels - Create And Update
+
+#!pwsh
+
+# Labels Create And Update endpoint - requires a URL encoded query string
+#   and a post body containing the label properties to create or update 
+#   example labelBody: '{"properties": {"color": "red", "displayName": "This is a test label - #1"}}'
+function Labels-Create {
+    param(
+        [string]$labelName,
+        [string]$updateBody)
+    $labelName = $labelName.replace("\s+",'')
+    $Global:apiVersion = '2022-04-01-preview'
+    AzureAuth -planeType 'control'
+    $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
+    $payload = $updateBody
+    $Params = @{
+            "Method"="PUT"
+            "ContentType"="application/json"
+            "Body"=$payload
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+Labels-Create -labelName "TestLabel1" -updateBody '{"properties": {"color": "red", "displayName": "This is a test label - #1"}}'
+
+#!markdown
+
+### Labels - List By Workspace
+
+#!pwsh
+
+# Returns a list of labels in a workspace
+function Labels-List {
+    $Global:apiVersion = '2022-04-01-preview'
+    AzureAuth -planeType 'control'
+    $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels?api-version=" + $apiVersion
+    $Params = @{
+            "Method"="GET"
+            "ContentType"="application/json"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+Labels-List
+
+#!markdown
+
+### Labels - Get
+
+#!pwsh
+
+# Returns a label in a workspace
+function Labels-Get {
+    param(
+        [string]$labelName)
+    $Global:apiVersion = '2022-04-01-preview'
+    AzureAuth -planeType 'control'
+    $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
+    $Params = @{
+            "Method"="GET"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+Labels-Get -labelName "TestLabel1"
+
+#!markdown
+
+### Labels - Delete
+
+#!pwsh
+
+# Deletes a label in a workspace
+function Labels-Delete {
+    param(
+        [string]$labelName)
+    $Global:apiVersion = '2022-04-01-preview'
+    AzureAuth -planeType 'control'
+    $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
+    $Params = @{
+            "Method"="DELETE"
+            "ContentType"="application/json"
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+Labels-Delete -labelName "TestLabel1"
+
+#!markdown
+
+### Labels - Update
+
+#!pwsh
+
+# Labels Update endpoint - requires a URL encoded query string
+#   and a post body containing the label properties to update 
+#   example post body: '{"labels": {"Label1": True}, "state": "confirmed", "transfers":["sslCert"], "externalId": "123456"}'
+#   accepted transfers values: contact, domain, ipBlock, host, page, sslCert, as, ipAddress
+function Labels-Update {
+    param(
+        [string]$labelName,
+        [string]$updateBody)
+    $labelName = $labelName.replace("\s+",'').Trim()
+    $Global:apiVersion = '2022-04-01-preview'
+    AzureAuth -planeType 'control'
+    $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
+    $payload = $updateBody
+    $Params = @{
+            "Method"="PATCH"
+            "ContentType"="application/json"
+            "Body"=$payload
+            "Headers" = @{
+                "User-Agent"="MDEASM PowerShell Notebook"
+                "Authorization" = "Bearer $bearerToken"
+            }
+        }
+    $response = Invoke-RestMethod -Uri $Uri @Params
+    return $response
+}
+
+#!pwsh
+
+Labels-Update -labelName "TestLabel1" -updateBody '{"properties": {"color": "blue", "displayName": "This is a test label - #1 v2"}}'
