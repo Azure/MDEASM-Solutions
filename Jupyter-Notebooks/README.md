@@ -1,6 +1,23 @@
 ## MDEASM API sample Jupyter Notebooks
 This repo contains sample notebooks for using the Microsoft Defender External Attack Surface Management (MDEASM) API.
 
+These Jupyter Notebooks demonstrate the usage of the MDEASM API endpoints that allow users to access their attack surface data easily using PowerShell or Python in an interactive environment.
+
+Available endpoints/actions:
+Assets - List
+Assets - Get
+Assets - Update
+Tasks - Get
+Tasks - List
+Tasks - Cancel
+Bonus Function - Get Common Assets
+Labels - Create And Update
+Labels -  List
+Labels - Get
+Labels - Delete
+Labels - Update
+
+
 ## Instructions to use the notebooks
 Recommended - Use VS Code and Extensions
 Python notebook, follow these steps:
