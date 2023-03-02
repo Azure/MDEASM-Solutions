@@ -285,7 +285,7 @@ function Cancel-Task {
     if ($taskId -match $uuidRegex) {
         $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks/" + $taskId + ":cancel?api-version=" + $apiVersion
         $Params = @{
-            "Method"="GET"
+            "Method"="POST"
             "ContentType"="application/json"
             "Headers" = @{
                 "User-Agent"="MDEASM PowerShell Notebook"
