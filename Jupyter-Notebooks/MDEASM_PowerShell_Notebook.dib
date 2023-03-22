@@ -1,6 +1,6 @@
 #!meta
 
-{"kernelInfo":{"defaultKernelName":"csharp","items":[{"name":"csharp","languageName":"C#","aliases":["c#","C#"]},{"name":"pwsh","languageName":"PowerShell","aliases":["powershell"]},{"name":"vscode","aliases":["frontend"],"languageName":null},{"name":".NET","aliases":[]},{"name":"fsharp","languageName":"F#","aliases":["f#","F#"]},{"name":"html","languageName":"HTML","aliases":[]},{"name":"javascript","languageName":"JavaScript","aliases":["js"]},{"name":"kql","languageName":"KQL","aliases":[]},{"name":"mermaid","languageName":"Mermaid","aliases":[]},{"name":"sql","languageName":"SQL","aliases":[]},{"name":"value","aliases":[]},{"name":"webview","aliases":[]}]}}
+{"kernelInfo":{"defaultKernelName":"csharp","items":[{"aliases":[],"name":".NET"},{"aliases":["C#","c#"],"languageName":"C#","name":"csharp"},{"aliases":["F#","f#"],"languageName":"F#","name":"fsharp"},{"aliases":[],"languageName":"HTML","name":"html"},{"aliases":["js"],"languageName":"JavaScript","name":"javascript"},{"aliases":[],"languageName":"KQL","name":"kql"},{"aliases":[],"languageName":"Mermaid","name":"mermaid"},{"aliases":["powershell"],"languageName":"PowerShell","name":"pwsh"},{"aliases":[],"languageName":"SQL","name":"sql"},{"aliases":[],"name":"value"},{"aliases":["frontend"],"name":"vscode"},{"aliases":[],"name":"webview"}]}}
 
 #!markdown
 
@@ -18,34 +18,42 @@ This is a sample notebook for querying your MDEASM inventory. A few prerequisite
 
 #!pwsh
 
-# Important variables to set
-$Global:bearerToken = $null # This will be set by the azure_auth() function otherwise enter the token as a string in side quotes ''
-$Global:bearerTokenExpires = 0 # This will be set by the azure_auth() function otherwise enter the epoch time in seconds as an integer
-$Global:clientId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Application (client) ID - string [required]
-$Global:clientSecret = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Client secret - string [required]
-$Global:tenantId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Directory (tenant) ID - string [required]
-$Global:subscriptionId = '' # ex. 'a8c5a9e0-0000-0000-0000-000000000000' => Subscription ID - string [required]
-$Global:resourceGroupName = '' # ex. 'myMDEASMAPItest-rg' => Resource group name - string [required]
-$Global:resourceName = '' # ex. 'myMDEASMworkspace' => Resource/Workspace name - string [required]
-$Global:region = '' # ex. 'eastus' => Region - string [required]
-# Leave these variables unchanged until you need to change them
-$Global:resource = $null # => API Resource - string [supplied]
-$Global:apiVersion = '2022-11-01-preview' # => API Version - string [supplied]
-$Global:maxpagesize = 25 # => Max page size - int [required]
-$Global:mark = '*' # => Mark - string [optional]
-$Global:currentPlane = $null # => Current plane - string [required]
-$Global:AuthURL = $null # => Authentication URL - string [supplied]
+try {
+    . .\mdeasm_creds.ps1
+    $Script:clientId = $clientId
+    $Script:clientSecret = $clientSecret
+    $Script:tenantId = $tenantId
+    $Script:subscriptionId = $subscriptionId
+    $Script:resourceGroupName = $resourceGroupName
+    $Script:resourceName = $resourceName
+    $Script:region = $region
+} catch {
+    Write-Error 'Enter the credentials to proceed.'
+}
 
-# Utility variables
-$uuidRegex = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
-$Global:AuthParams = New-Object "System.Collections.Generic.Dictionary[[string],[string]]"
-$Global:AuthParams.Add('clientId', $clientId)
-$Global:AuthParams.Add('clientSecret', $clientSecret)
-$Global:AuthParams.Add('tenantId', $tenantId)
-$Global:AuthParams.Add('bearerToken', $bearerToken)
-$Global:AuthParams.Add('bearerTokenExpires', $bearerTokenExpires)
+# Important variables to set
+if ($null -eq $clientId) {$Script:clientId = Read-Host -Prompt 'Enter the client ID'}
+if ($null -eq $clientSecret) {$Script:clientSecret = Read-Host -Prompt 'Enter the client secret' -AsSecureString}
+if ($null -eq $tenantId) {$Script:tenantId = Read-Host -Prompt 'Enter the tenant ID'}
+if ($null -eq $subscriptionId) {$Script:subscriptionId = Read-Host -Prompt 'Enter the subscription ID'}
+if ($null -eq $resourceGroupName) {$Script:resourceGroupName = Read-Host -Prompt 'Enter the resource group name'}
+if ($null -eq $resourceName) {$Script:resourceName = Read-Host -Prompt 'Enter the resource name'}
+if ($null -eq $region) {$Script:region = Read-Host -Prompt 'Enter the region'}
+
+# Authentication variables
+$Script:bearerToken = $null # This will be set by the azure_auth() function otherwise enter the token as a string in side quotes ''
+$Script:bearerTokenExpires = 0 # This will be set by the azure_auth() function otherwise enter the epoch time in seconds as an integer
+
+# Leave these variables unchanged until you need to change them
+$Script:resource = $null # => API Resource - string [supplied]
+$Script:apiVersion = '2022-11-01-preview' # => API Version - string [supplied]
+$Script:maxpagesize = 25 # => Max page size - int [required]
+$Script:mark = '*' # => Mark - string [optional]
+$Script:currentPlane = $null # => Current plane - string [required]
+$Script:AuthURL = $null # => Authentication URL - string [supplied]
 
 function AzureAuth {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory = $true)]
         [ValidateSet('data', 'control')]
@@ -53,9 +61,9 @@ function AzureAuth {
     )
     $planeType = $planeType.ToLower()
     if ($planeType -eq 'data') {
-        $Global:resource = 'scope=https%3A%2F%2Feasm.defender.microsoft.com%2F.default'
+        $Script:resource = 'scope=https%3A%2F%2Feasm.defender.microsoft.com%2F.default'
     } elseif ($planeType -eq 'control') {
-        $Global:resource = 'scope=https%3A%2F%2Fmanagement.azure.com%2F.default'
+        $Script:resource = 'scope=https%3A%2F%2Fmanagement.azure.com%2F.default'
     } else {
         Write-Error 'Invalid plane type'
     }
@@ -72,9 +80,9 @@ function AzureAuth {
 
         $response = Invoke-RestMethod -Uri "https://login.microsoftonline.com/$tenantId/oauth2/v2.0/token" -Method 'GET' -Headers $headers -Body $body
 
-        $Global:bearerToken = $response.access_token
-        $Global:bearerTokenExpires = (Get-Date -AsUTC -UFormat %s) + $response.expires_in
-        $Global:currentPlane = $planeType
+        $Script:bearerToken = $response.access_token
+        $Script:bearerTokenExpires = (Get-Date -AsUTC -UFormat %s) + $response.expires_in
+        $Script:currentPlane = $planeType
     } else {
         Write-Error 'No bearer token or client credentials provided'
     }
@@ -88,6 +96,10 @@ if ($bearerToken -and $bearerTokenExpires -gt (Get-Date -AsUTC -UFormat %s)) {
     Write-Error 'Authentication failed'
 }
 
+# Utility Variables - Do not change
+$Script:whoisCategories = @('adminContacts', 'adminNames', 'adminPhones', 'adminOrgs', 'registrantContacts', 'registrantNames', 'registrantPhones', 'registrantOrgs', 'technicalContacts', 'technicalNames', 'technicalPhones', 'technicalOrgs')
+$Script:whoisFilter = @('privacy', 'redacted', 'godaddy', 'private', 'protected', 'proxy', 'masking', 'privateregistration', 'safenames.net', 'domaincontrol.com', 'enom.com', 'verisign.com', 'domainhasexpired.com', 'ultradns.net', 'web.com', 'cscglobal.com', 'namecheap', 'hichina', 'amazon', 'google', 'ultrahost', 'aws', 'nsone.net', 'hugedomains', 'gdpr')
+
 #!markdown
 
 ### Assets - List
@@ -96,13 +108,15 @@ if ($bearerToken -and $bearerTokenExpires -gt (Get-Date -AsUTC -UFormat %s)) {
 
 # Retrieve a list of assets from a URL encoded query
 function Get-AssetsList {
+    [CmdletBinding()]
     param (
-        [string]$query = '')
-    
+        [Parameter(Mandatory = $true)]
+        [ValidateLength(4, 1000)]
+        [string]$Query
+    )
     $query = [System.Web.HttpUtility]::UrlEncode($query)
     AzureAuth -planeType 'data'
     $Global:apiVersion = '2022-11-01-preview'
-    $resultSet = @()
     $Uri = "https://$region.easm.defender.microsoft.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/workspaces/$resourceName/assets?api-version=$apiVersion&maxpagesize=$maxpagesize&filter=$query&mark=$mark"
     $Params = @{
         "Method"="GET"
@@ -114,25 +128,22 @@ function Get-AssetsList {
     }
 
     $response = (Invoke-RestMethod -Uri $Uri @Params)
-    foreach ($_ in $response.content) {
-        $resultSet += $_.name
-    }
+    $assetsObject = $response.content
 
     while ($response.nextLink -ne $null) {
         AzureAuth -planeType 'data'
         $response = (Invoke-RestMethod -Uri $response.nextLink.toString() @Params)
-        foreach ($_ in $response.content) {
-            $resultSet += $_.name
-        }
+        $assetsObject += $response.content 
+        
         $wait = Get-Random -Minimum 0.5 -Maximum 0.95
         Start-Sleep -Seconds $wait
     }
-    return $resultSet
+    return $assetsObject
 }
 
 #!pwsh
 
-Get-AssetsList -query 'state = confirmed AND kind in ("domain")'
+Get-AssetsList -query 'state = confirmed AND kind in ("contact")'
 
 #!markdown
 
@@ -142,11 +153,12 @@ Get-AssetsList -query 'state = confirmed AND kind in ("domain")'
 
 # Get a single asset details related to an assetId
 function Get-Asset {
+    [CmdletBinding()]
     param (
         [string]$assetId)
     
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     if ($assetId -match $uuidRegex) {
         $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/assets/" + $assetId + "?api-version=" + $apiVersion
         $Params = @{
@@ -179,12 +191,13 @@ Get-Asset -assetId 'a8c5a9e0-0000-0000-0000-000000000000'
 #   example post body: '{"labels": {"Label1": True}, "state": "confirmed", "transfers":["sslCert"], "externalId": "123456"}'
 #   accepted transfers values: contact, domain, ipBlock, host, page, sslCert, as, ipAddress
 function Update-Assets {
+    [CmdletBinding()]
     param(
         [string]$query,
         [string]$updateBody)
 
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     $query = [System.Web.HttpUtility]::UrlEncode($query)
 
     $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/assets?filter=" + $query + "&api-version=" + $apiVersion
@@ -216,11 +229,12 @@ Update-Assets -query $query -updateBody $updateBody
 
 # Retrieves a single task by taskId
 function Get-Task {
+    [CmdletBinding()]
     param (
         [string]$taskId)
     
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     if ($taskId -match $uuidRegex) {
         $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks/" + $taskId + "?api-version=" + $apiVersion
         $Params = @{
@@ -250,8 +264,10 @@ Get-Task -taskId 'a8c5a9e0-0000-0000-0000-000000000000'
 
 # Retrieves a list of tasks by workspace name
 function Get-TaskList {    
+    [CmdletBinding()]
+    param ()
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks?api-version=" + $apiVersion
     $Params = @{
         "Method"="GET"
@@ -277,11 +293,12 @@ Get-TaskList
 
 # Cancels a single task by taskId
 function Cancel-Task {
+    [CmdletBinding()]
     param (
         [string]$taskId)
     
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     if ($taskId -match $uuidRegex) {
         $Uri = "https://" + $region + ".easm.defender.microsoft.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/workspaces/" + $resourceName + "/tasks/" + $taskId + ":cancel?api-version=" + $apiVersion
         $Params = @{
@@ -313,11 +330,16 @@ Cancel-Task -taskId 'a8c5a9e0-0000-0000-0000-000000000000'
 # Retrieve a list of assets from a URL encoded query then identify and count the number of common domains, ipBlocks, and ASNs
 # This function is slow due to the number of API calls required to retrieve the full list of assets
 function Get-CommonAssets {
+    [CmdletBinding()]
     param (
-        [string]$query = '')
+        [string]$query,
+        [switch]$includeNS
+
+
+    )
     $query = [System.Web.HttpUtility]::UrlEncode($query)
     AzureAuth -planeType 'data'
-    $Global:apiVersion = '2022-11-01-preview'
+    $Script:apiVersion = '2022-11-01-preview'
     $resultSet = @{}
     $Uri = "https://$region.easm.defender.microsoft.com/subscriptions/$subscriptionId/resourceGroups/$resourceGroupName/workspaces/$resourceName/assets?api-version=$apiVersion&maxpagesize=$maxpagesize&filter=$query&mark=$mark"
     $Params = @{
@@ -331,12 +353,68 @@ function Get-CommonAssets {
 
     $response = (Invoke-RestMethod -Uri $Uri @Params)
     foreach ($_ in $response.content) {
-        if ($_.kind -eq "host" -or $_.kind -eq "page") {
+        if ($_.kind -eq "domain") {
             if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
-                $resultSet[$_.asset.domain] += 1
+                $resultSet[[string]$_.asset.domain] += 1
             } else {
-                $resultSet.Add($_.asset.domain, 1)
+                $resultSet.Add([string]$_.asset.domain, 1)
             }
+            foreach ($whois in $whoisCategories) {
+                if ($whois -in $_.asset.keys) {
+                    $contacts = Select-Object -InputObject $_.asset -ExpandProperty $whois | Where-Object {$_.asset.$($whois).recent -eq $true} | Select-Object -Property value
+                    foreach ($contact in $contacts) {
+                        if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                            $resultSet[[string]$contact] += 1
+                        } else {
+                            $resultSet.Add([string]$contact, 1)
+                        }
+                    }
+                }
+            }
+            if ($includeNS) {
+                if ('nameServers' -in $_.asset.Keys) {
+                    $namerservers = Select-Object -InputObject $_.asset -ExpandProperty nameServers | Where-Object {$_.asset.nameServers.recent -eq $true} | Select-Object -Property value
+                    foreach ($ns in $_.asset.nameServers) {
+                        if ($ns -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                            $resultSet[[string]$ns] += 1
+                        } else {
+                            $resultSet.Add([string]$ns, 1)
+                        }
+                    }
+                }
+            }
+            
+        } elseif ($_.kind -eq "host" -or $_.kind -eq "page") {
+            if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
+                $resultSet[[string]$_.asset.domain] += 1
+            } else {
+                $resultSet.Add([string]$_.asset.domain, 1)
+            }
+            foreach ($whois in $whoisCategories) {
+                if ($whois -in $_.asset.domainAsset.keys) {
+                    $contacts = Select-Object -InputObject $_.asset.domainAsset -ExpandProperty $whois | Select-Object -Property value | Where-Object {$_.asset.domainAsset.$($whois).recent -eq $true}
+                    foreach ($contact in $contacts) {
+                        if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                            $resultSet[[string]$contact] += 1
+                        } else {
+                            $resultSet.Add([string]$contact, 1)
+                        }
+                    }
+                }
+            }
+            if ($includeNS) {
+                if ('nameServers' -in $_.asset.domainAsset.Keys) {
+                    $namerservers = Select-Object -InputObject $_.asset.domainAsset -ExpandProperty nameServers | Where-Object {$_.asset.domainAsset.nameServers.recent -eq $true} | Select-Object -Property value
+                    foreach ($ns in $_.asset.nameServers) {
+                        if ($ns -in $resultSet.Keys -and $ns -notin $whoisFilter) {
+                            $resultSet[[string]$ns] += 1
+                        } else {
+                            $resultSet.Add([string]$ns, 1)
+                        }
+                    }
+                }
+            }
+
         } elseif ($_.kind -eq "ipAddress") {
             if ($_.asset.ipBlocks -ne $null -and $_.asset.ipBlocks.Count -ne 0) {
                 $ipBlocks = Select-Object -InputObject $_.asset -ExpandProperty ipBlocks | Select-Object -Property ipBlock
@@ -370,6 +448,28 @@ function Get-CommonAssets {
                     }
                 }
             }
+            if ($_.asset.netNames -ne $null -and $_.asset.netNames -ne 0) {
+                $netNames = Select-Object -InputObject $_.asset -ExpandProperty netNames | Select-Object -Property value
+                foreach ($netName in $netNames) {
+                    if ([string]$netName -in $resultSet.Keys) {
+                        $resultSet[[string]$netName] += 1
+                    } else {
+                        $resultSet.Add([string]$netName, 1)
+                    }
+                }
+            }
+            foreach ($whois in $whoisCategories) {
+                if ($whois -in $_.asset.keys) {
+                    $contacts = Select-Object -InputObject $_.asset -ExpandProperty $whois | Select-Object -Property value | Where-Object {$_.asset.$($whois).recent -eq $true}
+                    foreach ($contact in $contacts) {
+                        if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                            $resultSet[[string]$contact] += 1
+                        } else {
+                            $resultSet.Add([string]$contact, 1)
+                        }
+                    }
+                }
+            }
 
         }
     }
@@ -378,12 +478,68 @@ function Get-CommonAssets {
         AzureAuth -planeType 'data'
         $response = (Invoke-RestMethod -Uri $response.nextLink.toString() @Params)
         foreach ($_ in $response.content) {
-            if ($_.kind -eq "host" -or $_.kind -eq "page") {
+            if ($_.kind -eq "domain") {
                 if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
-                    $resultSet[$_.asset.domain] += 1
+                    $resultSet[[string]$_.asset.domain] += 1
                 } else {
-                    $resultSet.Add($_.asset.domain, 1)
+                    $resultSet.Add([string]$_.asset.domain, 1)
                 }
+                foreach ($whois in $whoisCategories) {
+                    if ($whois -in $_.asset.keys) {
+                        $contacts = Select-Object -InputObject $_.asset -ExpandProperty $whois | Where-Object {$_.asset.$($whois).recent -eq $true} | Select-Object -Property value
+                        foreach ($contact in $contacts) {
+                            if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                                $resultSet[[string]$contact] += 1
+                            } else {
+                                $resultSet.Add([string]$contact, 1)
+                            }
+                        }
+                    }
+                }
+                if ($includeNS) {
+                    if ('nameServers' -in $_.asset.Keys) {
+                        $namerservers = Select-Object -InputObject $_.asset -ExpandProperty nameServers | Where-Object {$_.asset.nameServers.recent -eq $true} | Select-Object -Property value
+                        foreach ($ns in $_.asset.nameServers) {
+                            if ($ns -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                                $resultSet[[string]$ns] += 1
+                            } else {
+                                $resultSet.Add([string]$ns, 1)
+                            }
+                        }
+                    }
+                }
+                
+            } elseif ($_.kind -eq "host" -or $_.kind -eq "page") {
+                if ($_.asset.domain -ne $null -and $_.asset.domain -in $resultSet.Keys) {
+                    $resultSet[[string]$_.asset.domain] += 1
+                } else {
+                    $resultSet.Add([string]$_.asset.domain, 1)
+                }
+                foreach ($whois in $whoisCategories) {
+                    if ($whois -in $_.asset.domainAsset.keys) {
+                        $contacts = Select-Object -InputObject $_.asset.domainAsset -ExpandProperty $whois | Select-Object -Property value | Where-Object {$_.asset.domainAsset.$($whois).recent -eq $true}
+                        foreach ($contact in $contacts) {
+                            if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                                $resultSet[[string]$contact] += 1
+                            } else {
+                                $resultSet.Add([string]$contact, 1)
+                            }
+                        }
+                    }
+                }
+                if ($includeNS) {
+                    if ('nameServers' -in $_.asset.domainAsset.Keys) {
+                        $namerservers = Select-Object -InputObject $_.asset.domainAsset -ExpandProperty nameServers | Where-Object {$_.asset.domainAsset.nameServers.recent -eq $true} | Select-Object -Property value
+                        foreach ($ns in $_.asset.nameServers) {
+                            if ($ns -in $resultSet.Keys -and $ns -notin $whoisFilter) {
+                                $resultSet[[string]$ns] += 1
+                            } else {
+                                $resultSet.Add([string]$ns, 1)
+                            }
+                        }
+                    }
+                }
+
             } elseif ($_.kind -eq "ipAddress") {
                 if ($_.asset.ipBlocks -ne $null -and $_.asset.ipBlocks.Count -ne 0) {
                     $ipBlocks = Select-Object -InputObject $_.asset -ExpandProperty ipBlocks | Select-Object -Property ipBlock
@@ -417,6 +573,28 @@ function Get-CommonAssets {
                         }
                     }
                 }
+                if ($_.asset.netNames -ne $null -and $_.asset.netNames -ne 0) {
+                    $netNames = Select-Object -InputObject $_.asset -ExpandProperty netNames | Select-Object -Property value
+                    foreach ($netName in $netNames) {
+                        if ([string]$netName -in $resultSet.Keys) {
+                            $resultSet[[string]$netName] += 1
+                        } else {
+                            $resultSet.Add([string]$netName, 1)
+                        }
+                    }
+                }
+                foreach ($whois in $whoisCategories) {
+                    if ($whois -in $_.asset.keys) {
+                        $contacts = Select-Object -InputObject $_.asset -ExpandProperty $whois | Select-Object -Property value | Where-Object {$_.asset.$($whois).recent -eq $true}
+                        foreach ($contact in $contacts) {
+                            if ($contact -in $resultSet.Keys -and $contact -notin $whoisFilter) {
+                                $resultSet[[string]$contact] += 1
+                            } else {
+                                $resultSet.Add([string]$contact, 1)
+                            }
+                        }
+                    }
+                }
             }
         }
         $wait = Get-Random -Minimum 0.5 -Maximum 0.95
@@ -428,7 +606,7 @@ function Get-CommonAssets {
 
 #!pwsh
 
-Get-CommonAssets -query 'state = confirmed AND kind in ("host","ipAddress")'
+Get-CommonAssets -query 'state = confirmed AND kind in ("domain")' -includeNS
 
 #!markdown
 
@@ -445,7 +623,7 @@ function Labels-Create {
         [string]$labelName,
         [string]$updateBody)
     $labelName = $labelName.replace("\s+",'')
-    $Global:apiVersion = '2022-04-01-preview'
+    $Script:apiVersion = '2022-04-01-preview'
     AzureAuth -planeType 'control'
     $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
     $payload = $updateBody
@@ -474,7 +652,7 @@ Labels-Create -labelName "TestLabel1" -updateBody '{"properties": {"color": "red
 
 # Returns a list of labels in a workspace
 function Labels-List {
-    $Global:apiVersion = '2022-04-01-preview'
+    $Script:apiVersion = '2022-04-01-preview'
     AzureAuth -planeType 'control'
     $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels?api-version=" + $apiVersion
     $Params = @{
@@ -486,7 +664,7 @@ function Labels-List {
             }
         }
     $response = Invoke-RestMethod -Uri $Uri @Params
-    return $response
+    return $response.value
 }
 
 #!pwsh
@@ -503,7 +681,7 @@ Labels-List
 function Labels-Get {
     param(
         [string]$labelName)
-    $Global:apiVersion = '2022-04-01-preview'
+    $Script:apiVersion = '2022-04-01-preview'
     AzureAuth -planeType 'control'
     $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
     $Params = @{
@@ -531,7 +709,7 @@ Labels-Get -labelName "TestLabel1"
 function Labels-Delete {
     param(
         [string]$labelName)
-    $Global:apiVersion = '2022-04-01-preview'
+    $Script:apiVersion = '2022-04-01-preview'
     AzureAuth -planeType 'control'
     $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
     $Params = @{
@@ -565,7 +743,7 @@ function Labels-Update {
         [string]$labelName,
         [string]$updateBody)
     $labelName = $labelName.replace("\s+",'').Trim()
-    $Global:apiVersion = '2022-04-01-preview'
+    $Script:apiVersion = '2022-04-01-preview'
     AzureAuth -planeType 'control'
     $Uri = "https://management.azure.com/subscriptions/" + $subscriptionId + "/resourceGroups/" + $resourceGroupName + "/providers/Microsoft.Easm/workspaces/" + $resourceName + "/labels/" + $labelName + "?api-version=" + $apiVersion
     $payload = $updateBody
