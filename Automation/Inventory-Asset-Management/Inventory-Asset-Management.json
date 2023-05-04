@@ -1,0 +1,526 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+	"metadata": {
+		"comments": "Automation: Azure Logic App process to Manage Inventory Assets via Labels and Asset State.",
+		"author": "MD EASM Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com"
+	},
+    "parameters": {
+        "workflows_Inventory_Asset_Management_name": {
+            "defaultValue": "Inventory-Asset-Management",
+            "type": "String"
+        },
+		"ClientId": {
+			"defaultValue": "",
+			"type": "String"
+		},
+		"ClientSecret": {
+			"defaultValue": "",
+			"type": "SecureString"
+		},
+		"EASMWorkspaceName": {
+			"defaultValue": "",
+			"type": "String"
+		},
+		"RunFrequency": {
+			"defaultValue": 24,
+			"type": "Int",
+			"metadata": {
+				"description": "Schedule in Hours"
+			}
+		},
+		"api-version": {
+			"defaultValue": "2022-11-01-preview",
+			"type": "String"
+		},
+		"LabelName": {
+			"defaultValue": "",
+			"type": "String",
+			"metadata": {
+				"description": "Label Assets will be tagged with"
+			}
+		},
+		"filter": {
+			"defaultValue": "",
+			"type": "String",
+			"metadata": {
+				"description": "Inventory Asset Query"
+			}
+		},
+		"maxpagesize": {
+			"defaultValue": "50",
+			"type": "String"
+		},
+        "stateValue": {
+            "defaultValue": "",
+            "type": "String",
+			"metadata": {
+				"description": "allowed values: archived, candidate, associatedThirdparty, associated, dismissed, candidateInvestigate, confirmed, associatedPartner"
+			}
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_Inventory_Asset_Management_name')]",
+            "location": "[resourceGroup().location]",
+            "tags": {},
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "ClientId": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "ClientSecret": {
+                            "defaultValue": "",
+                            "type": "SecureString"
+                        },
+                        "EASMWorkspaceName": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "LabelName": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "Region": {
+                            "defaultValue": "[resourceGroup().location]",
+                            "type": "String"
+                        },
+                        "ResourceGroupName": {
+                            "defaultValue": "[resourceGroup().name]",
+                            "type": "String"
+                        },
+                        "RunFrequency": {
+                            "defaultValue": 12,
+                            "type": "Int"
+                        },
+                        "SubscriptionId": {
+                            "defaultValue": "[subscription().subscriptionId]",
+                            "type": "String"
+                        },
+                        "TenantId": {
+                            "defaultValue": "[subscription().tenantId]",
+                            "type": "String"
+                        },
+                        "api-version": {
+                            "defaultValue": "2022-11-01-preview",
+                            "type": "String"
+                        },
+                        "filter": {
+                            "defaultValue": "",
+                            "type": "String"
+                        },
+                        "maxpagesize": {
+                            "defaultValue": "50",
+                            "type": "String"
+                        },
+                        "stateValue": {
+                            "defaultValue": "",
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Hour",
+                                "interval": "@parameters('RunFrequency')"
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "Hour",
+                                "interval": 12
+                            },
+                            "type": "Recurrence",
+                            "conditions": [],
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "runs": 1
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Condition": {
+                            "actions": {
+                                "Create_Label": {
+                                    "runAfter": {},
+                                    "limit": {
+                                        "timeout": "PT90S"
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://management.core.windows.net/",
+                                            "clientId": "@parameters('ClientId')",
+                                            "secret": "@parameters('ClientSecret')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "body": {},
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-LogicApps-AssetManagement"
+                                        },
+                                        "method": "PUT",
+                                        "queries": {
+                                            "api-version": "@parameters('api-version')"
+                                        },
+                                        "retryPolicy": {
+                                            "count": 10,
+                                            "interval": "PT20S",
+                                            "type": "fixed"
+                                        },
+                                        "uri": "https://management.azure.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups@{parameters('ResourceGroupName')}/providers/Microsoft.Easm/workspaces/@{parameters('EASMWorkspaceName')}/labels/@{parameters('LabelName')}"
+                                    }
+                                },
+                                "Set_var_jobId": {
+                                    "runAfter": {
+                                        "Update_Assets": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "JobId",
+                                        "value": "@{body('Update_Assets')?['id']}"
+                                    }
+                                },
+                                "Update_Assets": {
+                                    "runAfter": {
+                                        "Create_Label": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "limit": {
+                                        "timeout": "PT90S"
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://easm.defender.microsoft.com/",
+                                            "clientId": "@parameters('ClientId')",
+                                            "secret": "@parameters('ClientSecret')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "body": "@variables('updateBody')",
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-LogicApps-AssetManagement"
+                                        },
+                                        "method": "PATCH",
+                                        "queries": {
+                                            "api-version": "@parameters('api-version')",
+                                            "filter": "@parameters('filter')"
+                                        },
+                                        "retryPolicy": {
+                                            "count": 10,
+                                            "interval": "PT20S",
+                                            "type": "fixed"
+                                        },
+                                        "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Update_EASM_Asset": [
+                                    "Failed",
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {
+                                    "Condition_4": {
+                                        "actions": {
+                                            "Set_var_jobId_2": {
+                                                "runAfter": {},
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "JobId",
+                                                    "value": "@{body('Update_EASM_Asset')?['id']}"
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "else": {
+                                            "actions": {
+                                                "Terminate": {
+                                                    "runAfter": {},
+                                                    "type": "Terminate",
+                                                    "inputs": {
+                                                        "runStatus": "Failed"
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "expression": {
+                                            "and": [
+                                                {
+                                                    "equals": [
+                                                        "@outputs('Update_EASM_Asset')['statusCode']",
+                                                        200
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "type": "If"
+                                    }
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@outputs('Update_EASM_Asset')['statusCode']",
+                                            400
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If",
+                            "description": "If label does not exist, this path creates it and then updates assets with newly created label"
+                        },
+                        "Initialize_JobId_Var": {
+                            "runAfter": {
+                                "Initialize_updateBody_Var": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "JobId",
+                                        "type": "string"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_updateBody_Var": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "updateBody",
+                                        "type": "object",
+                                        "value": {}
+                                    }
+                                ]
+                            }
+                        },
+                        "Until": {
+                            "actions": {
+                                "Delay": {
+                                    "runAfter": {
+                                        "check_job_status": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Wait",
+                                    "inputs": {
+                                        "interval": {
+                                            "count": 10,
+                                            "unit": "Minute"
+                                        }
+                                    }
+                                },
+                                "check_job_status": {
+                                    "runAfter": {},
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://easm.defender.microsoft.com/",
+                                            "clientId": "@parameters('ClientId')",
+                                            "secret": "@parameters('ClientSecret')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-LogicApps-AssetManagement"
+                                        },
+                                        "method": "GET",
+                                        "queries": {
+                                            "api-version": "@parameters('api-version')"
+                                        },
+                                        "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/tasks/@{variables('JobId')}"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Condition": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": "@equals(body('check_job_status')?['state'], 'complete')",
+                            "limit": {
+                                "count": 8,
+                                "timeout": "PT2H"
+                            },
+                            "type": "Until"
+                        },
+                        "Update_Condition": {
+                            "actions": {
+                                "Set_updateBody": {
+                                    "runAfter": {},
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "updateBody",
+                                        "value": {
+                                            "labels": {
+                                                "@{parameters('LabelName')}": true
+                                            },
+                                            "state": "@{parameters('stateValue')}"
+                                        }
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_JobId_Var": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "else": {
+                                "actions": {
+                                    "update_label_or_state": {
+                                        "actions": {
+                                            "Set_updateBody_2": {
+                                                "runAfter": {},
+                                                "type": "SetVariable",
+                                                "inputs": {
+                                                    "name": "updateBody",
+                                                    "value": {
+                                                        "labels": {
+                                                            "@{parameters('LabelName')}": true
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "runAfter": {},
+                                        "else": {
+                                            "actions": {
+                                                "Set_updateBody_3": {
+                                                    "runAfter": {},
+                                                    "type": "SetVariable",
+                                                    "inputs": {
+                                                        "name": "updateBody",
+                                                        "value": {
+                                                            "state": "@{parameters('stateValue')}"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        },
+                                        "expression": {
+                                            "and": [
+                                                {
+                                                    "greater": [
+                                                        "@length(parameters('LabelName'))",
+                                                        1
+                                                    ]
+                                                }
+                                            ]
+                                        },
+                                        "type": "If"
+                                    }
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "greater": [
+                                            "@length(parameters('stateValue'))",
+                                            1
+                                        ]
+                                    },
+                                    {
+                                        "greater": [
+                                            "@length(parameters('LabelName'))",
+                                            1
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If"
+                        },
+                        "Update_EASM_Asset": {
+                            "runAfter": {
+                                "Update_Condition": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "limit": {
+                                "timeout": "PT90S"
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "audience": "https://easm.defender.microsoft.com/",
+                                    "clientId": "@parameters('ClientId')",
+                                    "secret": "@parameters('ClientSecret')",
+                                    "tenant": "@parameters('TenantId')",
+                                    "type": "ActiveDirectoryOAuth"
+                                },
+                                "body": "@variables('updateBody')",
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "User-Agent": "GitHub-LogicApps-AssetManagement"
+                                },
+                                "method": "PATCH",
+                                "queries": {
+                                    "api-version": "@parameters('api-version')",
+                                    "filter": "@{parameters('filter')} "
+                                },
+                                "retryPolicy": {
+                                    "count": 10,
+                                    "interval": "PT20S",
+                                    "type": "fixed"
+                                },
+                                "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                            },
+                            "description": "Update Alerted EASM Assets with a label to track history "
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "ClientId": {
+                        "value": "[parameters('ClientId')]"
+                    },
+                    "ClientSecret": {
+		    	"value": "[parameters('ClientSecret')]"
+		    },
+                    "EASMWorkspaceName": {
+                        "value": "[parameters('EASMWorkspaceName')]"
+                    },
+                    "LabelName": {
+                        "value": "[parameters('LabelName')]"
+                    },
+                    "RunFrequency": {
+                        "value": "[parameters('RunFrequency')]"
+                    },
+                    "api-version": {
+                        "value": "[parameters('api-version')]"
+                    },
+                    "filter": {
+                        "value": "[parameters('filter')]"
+                    },
+                    "maxpagesize": {
+                        "value": "[parameters('maxpagesize')]"
+                    },
+                    "stateValue": {
+                        "value": "[parameters('stateValue')]"
+                    }
+                }
+            }
+        }
+    ]
+}
