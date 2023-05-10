@@ -16,7 +16,7 @@ After selecting a playbook from https://github.com/Azure/MDEASM-Solutions:
 4. Click **Review+Create**
 
 Once deployment is complete, you will need to authorize each connection.
-1. For Example, Click the Email connection resource
+1. For Example, Click the Email Connection resource
 2. Select a Email Connection or create a new Email Connection
 3. Click Authorize
 4. Sign in
