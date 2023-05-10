@@ -1,0 +1,4 @@
+# Please edit/add the filter parameters in order to identify Default Open Pages for Apache, IIS & Nginx
+
+
+kind = "PAGE" and status = "confirmed" and rootUrl = "true" and pageTitle ~ "Index of" or pageTitle ~ "Apache" or pageTitle ~ "IIS Windows Server" or pageTitle = "nginx"
