@@ -606,6 +606,12 @@
                     },
                     "maxpagesize": {
                         "value": "[parameters('maxpagesize')]"
+                    },
+                    "Tenable-AccessKey": {
+                        "value": "[parameters('Tenable-AccessKey')]"
+                    },
+                    "Tenable-SecretKey": {
+                        "value": "[parameters('Tenable-SecretKey')]"
                     }
                 }
             }
