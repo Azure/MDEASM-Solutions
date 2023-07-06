@@ -6,7 +6,7 @@ Playbook demonstrates automation to download MDEASM Inventory assets and their d
 1. The playbook queries MDEASM Inventory using the 'filter' parameter and saves the API response in a specified folder in OneDrive Storage as JSON Files with datetimestamp in the file name.
 2. The default 'filter' parameter is set to query all Inventory Assets in the "Approved Inventory" Status. the parameter is made available to set your inventory query to match your requirements. Refer MDEASM API documentation for more details on this.
 3. The playbook uses OneDrive Logic Apps Connector
-4. This same process can be used to download newly added and updated assets in Inventory on a daily basis or at a set run frequency by including the field 'updatedAt' in the filter parameter.
+4. This same process can be used to download newly added and updated assets in Inventory on a daily basis or at a set run frequency by including parameter "recentDays" to 1.
 
 ## Prerequisites
 1. MDEASM API in this playbook supports Azure AD Authentication which requires you to have an App registration or Service Principal setup and used for authorization

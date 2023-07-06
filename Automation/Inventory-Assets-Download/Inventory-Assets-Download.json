@@ -23,7 +23,7 @@
 			"type": "String"
 		},
 		"RunFrequency": {
-			"defaultValue": 180,
+			"defaultValue": 1,
 			"type": "Int"
 		},
 		"api-version": {
@@ -37,6 +37,10 @@
 		"maxpagesize": {
 			"defaultValue": "100",
 			"type": "String"
+		},
+		"recentDays": {
+			"defaultValue": 180,
+			"type": "Int"
 		}
     },
     "variables": {
@@ -93,7 +97,7 @@
                             "type": "String"
                         },
                         "RunFrequency": {
-                            "defaultValue": 180,
+                            "defaultValue": 1,
                             "type": "Int"
                         },
                         "SubscriptionId": {
@@ -115,6 +119,10 @@
                         "maxpagesize": {
                             "defaultValue": "100",
                             "type": "String"
+                        },
+                        "recentDays": {
+                            "defaultValue": 180,
+                            "type": "Int"
                         }
                     },
                     "staticResults": {
@@ -134,7 +142,7 @@
                             },
                             "evaluatedRecurrence": {
                                 "frequency": "Day",
-                                "interval": 180
+                                "interval": 1
                             },
                             "type": "Recurrence"
                         }
@@ -151,6 +159,35 @@
                                         "value": "*"
                                     }
                                 ]
+                            }
+                        },
+                        "Initialize_calculateDate": {
+                            "runAfter": {
+                                "Initialize_Mark": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "calculateDate",
+                                        "type": "string",
+                                        "value": "@{utcNow()}"
+                                    }
+                                ]
+                            }
+                        },
+                        "Set_calculateDate": {
+                            "runAfter": {
+                                "Initialize_calculateDate": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "calculateDate",
+                                "value": "@{getPastTime(parameters('recentDays'), 'Day', 's')}.000Z"
                             }
                         },
                         "Until": {
@@ -213,7 +250,7 @@
                                                 "method": "GET",
                                                 "queries": {
                                                     "api-version": "@parameters('api-version')",
-                                                    "filter": "@parameters('filter')",
+                                                    "filter": " @{parameters('filter')} and lastSeen>=\"@{variables('calculateDate')}\"",
                                                     "mark": "@variables('mark')",
                                                     "maxpagesize": "@{parameters('maxpagesize')}"
                                                 },
@@ -303,7 +340,7 @@
                                 }
                             },
                             "runAfter": {
-                                "Initialize_Mark": [
+                                "Set_calculateDate": [
                                     "Succeeded"
                                 ]
                             },
@@ -347,6 +384,9 @@
                     },
                     "maxpagesize": {
                         "value": "[parameters('maxpagesize')]"
+                    },
+                    "recentDays": {
+                        "value": "[parameters('recentDays')]"
                     }
                 }
             }
