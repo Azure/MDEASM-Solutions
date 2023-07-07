@@ -22,6 +22,30 @@
 			"defaultValue": "WorkspaceName",
 			"type": "String"
 		},
+		"EASMRegion": {
+			"defaultValue": "",
+			"type": "String",
+			"allowedValues": [
+					"southcentralus",
+					"eastus",
+					"australiaeast",
+					"westus3",
+					"swedencentral",
+					"eastasia",
+					"japaneast",
+					"westeurope",
+					"northeurope",
+					"switzerlandnorth",
+					"canadacentral",
+					"centralus",
+					"norwayeast",
+					"francecentral",
+					""
+				],
+      "metadata": {
+        "description": "Allowed Azure region values, southcentralus, eastus, australiaeast, westus3, swedencentral, eastasia, japaneast, westeurope, northeurope, switzerlandnorth, canadacentral, centralus, norwayeast, francecentral"
+		}
+		},
 		"RunFrequency": {
 			"defaultValue": 1,
 			"type": "Int"
@@ -88,9 +112,25 @@
                             "defaultValue": "workSpaceName",
                             "type": "String"
                         },
-                        "Region": {
-                            "defaultValue": "[resourceGroup().location]",
-                            "type": "String"
+                        "EASMRegion": {
+                            "defaultValue": "",
+                            "type": "String",
+							"allowedValues": [
+								"southcentralus",
+								"eastus",
+								"australiaeast",
+								"westus3",
+								"swedencentral",
+								"eastasia",
+								"japaneast",
+								"westeurope",
+								"northeurope",
+								"switzerlandnorth",
+								"canadacentral",
+								"centralus",
+								"norwayeast",
+								"francecentral"
+							]
                         },
                         "ResourceGroupName": {
                             "defaultValue": "[resourceGroup().name]",
@@ -259,7 +299,7 @@
                                                     "interval": "PT20S",
                                                     "type": "fixed"
                                                 },
-                                                "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                                                "uri": "https://@{parameters('EASMRegion')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
                                             },
                                             "runtimeConfiguration": {
                                                 "contentTransfer": {
@@ -373,6 +413,9 @@
                     "EASMWorkspaceName": {
                         "value": "[parameters('EASMWorkspaceName')]"
                     },
+					"EASMRegion": {
+						"value": "[parameters('EASMRegion')]"
+					},
                     "RunFrequency": {
                         "value": "[parameters('RunFrequency')]"
                     },
