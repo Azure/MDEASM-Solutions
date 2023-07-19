@@ -176,7 +176,7 @@
                                             "interval": "PT20S",
                                             "type": "fixed"
                                         },
-                                        "uri": "https://management.azure.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups@{parameters('ResourceGroupName')}/providers/Microsoft.Easm/workspaces/@{parameters('EASMWorkspaceName')}/labels/@{parameters('LabelName')}"
+                                        "uri": "https://management.azure.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/providers/Microsoft.Easm/workspaces/@{parameters('EASMWorkspaceName')}/labels/@{parameters('LabelName')}"
                                     }
                                 },
                                 "Set_var_jobId": {
