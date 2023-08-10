@@ -552,7 +552,7 @@
                                     "interval": "PT20S",
                                     "type": "fixed"
                                 },
-                                "uri": "https://@{parameters('QualysBaseUrl')}/api/2.0/fo/asset/ip"
+                                "uri": "https://@{parameters('QualysBaseUrl')}/api/2.0/fo/asset/ip/"
                             }
                         },
                         "Set_deduplicate_Host_IP_variable": {
