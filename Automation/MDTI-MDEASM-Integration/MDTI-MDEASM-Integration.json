@@ -1,0 +1,1045 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    	"metadata": {
+		"comments": "Automation: Azure Logic App process to get all domains and check each one against MDTI Articles, Intel Profiles and Reputation scores and alert via Email notifications",
+		"author": "MDEASM & MDTI Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com"
+	},
+    "parameters": {
+        "workflows_MDTI_MDEASM_name": {
+            "defaultValue": "MDTI-MDEASM",
+            "type": "string"
+        },
+        "ClientIdMDTI": {
+                            "defaultValue": "MDTI-Client-ID",
+                            "type": "string"
+                        },
+                        "ClientSecretMDTI": {
+                            "defaultValue": "MDTI-Client-Secret",
+                            "type": "securestring"
+                        },
+                        "ClientIdMDEASM": {
+                            "defaultValue": "MDEASM-Client-ID",
+                            "type": "string"
+                        },
+                        "ClientSecretMDEASM": {
+                            "defaultValue": "MDEASM-Client-Secret",
+                            "type": "securestring"
+                        },
+                        "EASMWorkspaceName": {
+                            "defaultValue": "WorkspaceName",
+                            "type": "string"
+                        },
+                        "LookBack": {
+                            "defaultValue": 7,
+                            "type": "int",
+                            "metadata": {
+								"description": "Please enter the how far back you would like to check against MDTI Articles, Intel Profile and Reputation Scoring"
+							}
+                        },
+                        "RunFrequency": {
+                            "defaultValue": 7,
+                            "type": "int",
+                            "metadata": {
+								"description": "Schedule in Days"
+							}
+                        },
+                        "Score": {
+                            "defaultValue": 50,
+                            "type": "int",
+                            "metadata": {
+								"description": "Please enter a minimum MDTI reputation score you would like to be alerted on"
+							}
+                        },
+                        "EmailConnection": {
+                            "defaultValue": "EmailConnectionName",
+                            "type": "string",
+                            "metadata": {
+								"description": "Please enter the connection name to setup the correct outlook connection"
+							}
+						},
+						"ToEmail": {
+                            "defaultValue": "alerts@company.com",
+                            "type": "string",
+                            "metadata": {
+								"description": "Please enter the email address to recieve email alerts"
+							}
+						}
+    },
+    "variables": {
+    	"Office365ConnectionName": "[concat('Office365-', parameters('EmailConnection'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_MDTI_MDEASM_name')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "$connections": {
+                            "defaultValue": {},
+                            "type": "Object"
+                        },
+                        "ClientIdMDTI": {
+                            "defaultValue": "[parameters('ClientIdMDTI')]",
+                            "type": "string"
+                        },
+                        "ClientSecretMDTI": {
+                            "defaultValue": "[parameters('ClientSecretMDTI')]",
+                            "type": "securestring"
+                        },
+                        "ClientIdMDEASM": {
+                            "defaultValue": "[parameters('ClientIdMDEASM')]",
+                            "type": "string"
+                        },
+                        "ClientSecretMDEASM": {
+                            "defaultValue": "[parameters('ClientSecretMDEASM')]",
+                            "type": "securestring"
+                        },
+                        "EASMWorkspaceName": {
+                            "defaultValue": "[parameters('EASMWorkspaceName')]",
+                            "type": "string"
+                        },
+                        "LookBack": {
+                            "defaultValue": "[parameters('LookBack')]",
+                            "type": "int"
+                        },
+                        "Region": {
+                            "defaultValue": "[resourceGroup().location]",
+                            "type": "string"
+                        },
+                        "ResourceGroupName": {
+                            "defaultValue": "[resourceGroup().name]",
+                            "type": "string"
+                        },
+                        "RunFrequency": {
+                            "defaultValue": "[parameters('RunFrequency')]",
+                            "type": "int"
+                        },
+                        "Score": {
+                            "defaultValue": "[parameters('Score')]",
+                            "type": "int"
+                        },
+                        "SubscriptionId": {
+                            "defaultValue": "[subscription().subscriptionId]",
+                            "type": "string"
+                        },
+                        "TenantId": {
+                            "defaultValue": "[subscription().tenantId]",
+                            "type": "string"
+                        },
+                        "ToEmail": {
+                            "defaultValue": "[parameters('ToEmail')]",
+                            "type": "string"
+                        },
+                        "api-version": {
+                            "defaultValue": "2022-11-01-preview",
+                            "type": "string"
+                        },
+                        "filter": {
+                            "defaultValue": "state = \"confirmed\" AND kind = \"domain\"",
+                            "type": "string"
+                        },
+                        "maxpagesize": {
+                            "defaultValue": "50",
+                            "type": "string"
+                        }
+                    },
+                    "triggers": {
+                        "Recurrence": {
+                            "recurrence": {
+                                "frequency": "Day",
+                                "interval": "@parameters('RunFrequency')"
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "Day",
+                                "interval": 1
+                            },
+                            "type": "Recurrence"
+                        }
+                    },
+                    "actions": {
+                        "ArticleSeen": {
+                            "runAfter": {
+                                "IntelProfileSeen": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "ArticleSeen",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Article_Support_MDTI": {
+                            "actions": {
+                                "Create_HTML_table_2": {
+                                    "runAfter": {
+                                        "For_each_3": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Table",
+                                    "inputs": {
+                                        "format": "HTML",
+                                        "from": "@variables('ArticleSeen')"
+                                    }
+                                },
+                                "For_each_3": {
+                                    "foreach": "@variables('keyword_list')",
+                                    "actions": {
+                                        "For_each_4": {
+                                            "foreach": "@body('Parse_JSON_5')?['value']",
+                                            "actions": {
+                                                "Condition_3": {
+                                                    "actions": {
+                                                        "Append_to_array_variable": {
+                                                            "runAfter": {},
+                                                            "type": "AppendToArrayVariable",
+                                                            "inputs": {
+                                                                "name": "ArticleSeen",
+                                                                "value": {
+                                                                    "Keyword": "@{items('For_each_3')}",
+                                                                    "MDTIArticle": "@{items('For_each_4')?['title']}",
+                                                                    "MDTILink": "https://ti.defender.microsoft.com/articles/@{items('For_each_4')?['id']}"
+                                                                }
+                                                            }
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "expression": {
+                                                        "and": [
+                                                            {
+                                                                "greaterOrEquals": [
+                                                                    "@items('For_each_4')?['createdDateTime']",
+                                                                    "@variables('time')"
+                                                                ]
+                                                            }
+                                                        ]
+                                                    },
+                                                    "type": "If"
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Parse_JSON_5": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach"
+                                        },
+                                        "Parse_JSON_5": {
+                                            "runAfter": {
+                                                "Search_if_Keyword_has_been_idenified_in_MDTI_Articles": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@body('Search_if_Keyword_has_been_idenified_in_MDTI_Articles')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "@@odata.context": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "items": {
+                                                                "properties": {
+                                                                    "body": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "format": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "createdDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "imageUrl": {},
+                                                                    "isFeatured": {
+                                                                        "type": "boolean"
+                                                                    },
+                                                                    "lastUpdatedDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "summary": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "format": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "tags": {
+                                                                        "items": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "type": "array"
+                                                                    },
+                                                                    "title": {
+                                                                        "type": "string"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "id",
+                                                                    "createdDateTime",
+                                                                    "lastUpdatedDateTime",
+                                                                    "title",
+                                                                    "isFeatured",
+                                                                    "tags",
+                                                                    "imageUrl",
+                                                                    "summary",
+                                                                    "body"
+                                                                ],
+                                                                "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        },
+                                        "Search_if_Keyword_has_been_idenified_in_MDTI_Articles": {
+                                            "runAfter": {},
+                                            "type": "Http",
+                                            "inputs": {
+                                                "authentication": {
+                                                    "audience": "https://graph.microsoft.com",
+                                                    "clientId": "@parameters('ClientIdMDTI')",
+                                                    "secret": "@parameters('ClientSecretMDTI')",
+                                                    "tenant": "@parameters('TenantId')",
+                                                    "type": "ActiveDirectoryOAuth"
+                                                },
+                                                "headers": {
+                                                    "User-Agent": "GitHub-LogicApps-MDTIMDEASM"
+                                                },
+                                                "method": "GET",
+                                                "uri": "https://graph.microsoft.com/v1.0/security/threatIntelligence/articles?$search=\"@{items('For_each_3')}\""
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "Foreach"
+                                }
+                            },
+                            "runAfter": {
+                                "Until": [
+                                    "Succeeded",
+                                    "Failed"
+                                ]
+                            },
+                            "type": "Scope"
+                        },
+                        "Days": {
+                            "runAfter": {
+                                "Initialize_mark_for_paging_the_API": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Days",
+                                        "type": "integer",
+                                        "value": "@parameters('LookBack')"
+                                    }
+                                ]
+                            }
+                        },
+                        "DomainReputation": {
+                            "runAfter": {
+                                "Domain_Array": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Domainreputation",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Domain_Array": {
+                            "runAfter": {
+                                "lookbacktime": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "domainList",
+                                        "type": "array",
+                                        "value": []
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_mark_for_paging_the_API": {
+                            "runAfter": {},
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "mark",
+                                        "type": "string",
+                                        "value": "*"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_variable_keyword_array": {
+                            "runAfter": {
+                                "ArticleSeen": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "keyword_list",
+                                        "type": "array",
+                                        "value": []
+                                    }
+                                ]
+                            }
+                        },
+                        "IntelProfileSeen": {
+                            "runAfter": {
+                                "DomainReputation": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "IntelProfileSeen",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Intel_profile_View_MDTI": {
+                            "actions": {
+                                "Create_HTML_table_3": {
+                                    "runAfter": {
+                                        "For_each_5": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Table",
+                                    "inputs": {
+                                        "format": "HTML",
+                                        "from": "@variables('IntelProfileSeen')"
+                                    }
+                                },
+                                "For_each_5": {
+                                    "foreach": "@variables('domainList')",
+                                    "actions": {
+                                        "For_each_6": {
+                                            "foreach": "@body('Parse_JSON_4')?['value']",
+                                            "actions": {
+                                                "Append_to_array_variable_3": {
+                                                    "runAfter": {
+                                                        "Compose_3": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "AppendToArrayVariable",
+                                                    "inputs": {
+                                                        "name": "IntelProfileSeen",
+                                                        "value": {
+                                                            "Country": "@{items('For_each_6')?['countriesOrRegionsOfOrigin']?[0]?['label']}",
+                                                            "IntelProfile": "@{items('For_each_6')?['title']}",
+                                                            "IntelprofileLink": "https://ti.defender.microsoft.com/intel-profiles/@{items('For_each_6')?['id']}/description",
+                                                            "Keyword": "@{items('For_each_5')}",
+                                                            "Kind": "@{items('For_each_6')?['kind']}"
+                                                        }
+                                                    }
+                                                },
+                                                "Compose_3": {
+                                                    "runAfter": {},
+                                                    "type": "Compose",
+                                                    "inputs": {
+                                                        "Country": "@{items('For_each_6')?['countriesOrRegionsOfOrigin']}",
+                                                        "IntelProfile": "@{items('For_each_6')?['title']}",
+                                                        "IntelprofileLink": "https://ti.defender.microsoft.com/intel-profiles/@{items('For_each_6')?['id']}/description",
+                                                        "Keyword": "@{items('For_each_5')}",
+                                                        "Kind": "@{items('For_each_6')?['kind']}"
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Parse_JSON_4": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Foreach"
+                                        },
+                                        "Parse_JSON_4": {
+                                            "runAfter": {
+                                                "Search_if_Keyword_has_been_identified_in_MDTI_intel_profiles": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@body('Search_if_Keyword_has_been_identified_in_MDTI_intel_profiles')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "@@odata.context": {
+                                                            "type": "string"
+                                                        },
+                                                        "value": {
+                                                            "items": {
+                                                                "properties": {
+                                                                    "aliases": {
+                                                                        "items": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "type": "array"
+                                                                    },
+                                                                    "countriesOrRegionsOfOrigin": {
+                                                                        "items": {
+                                                                            "properties": {
+                                                                                "code": {
+                                                                                    "type": "string"
+                                                                                },
+                                                                                "label": {
+                                                                                    "type": "string"
+                                                                                }
+                                                                            },
+                                                                            "required": [
+                                                                                "label",
+                                                                                "code"
+                                                                            ],
+                                                                            "type": "object"
+                                                                        },
+                                                                        "type": "array"
+                                                                    },
+                                                                    "description": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "format": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "firstActiveDateTime": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "id": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "kind": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "summary": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "format": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    },
+                                                                    "targets": {
+                                                                        "items": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "type": "array"
+                                                                    },
+                                                                    "title": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "tradecraft": {
+                                                                        "properties": {
+                                                                            "content": {
+                                                                                "type": "string"
+                                                                            },
+                                                                            "format": {
+                                                                                "type": "string"
+                                                                            }
+                                                                        },
+                                                                        "type": "object"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "id",
+                                                                    "kind",
+                                                                    "title",
+                                                                    "firstActiveDateTime",
+                                                                    "aliases",
+                                                                    "targets",
+                                                                    "summary",
+                                                                    "description",
+                                                                    "tradecraft",
+                                                                    "countriesOrRegionsOfOrigin"
+                                                                ],
+                                                                "type": "object"
+                                                            },
+                                                            "type": "array"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        },
+                                        "Search_if_Keyword_has_been_identified_in_MDTI_intel_profiles": {
+                                            "runAfter": {},
+                                            "type": "Http",
+                                            "inputs": {
+                                                "authentication": {
+                                                    "audience": "https://graph.microsoft.com",
+                                                    "clientId": "@parameters('ClientIdMDTI')",
+                                                    "secret": "@parameters('ClientSecretMDTI')",
+                                                    "tenant": "@parameters('TenantId')",
+                                                    "type": "ActiveDirectoryOAuth"
+                                                },
+                                                "headers": {
+                                                    "User-Agent": "GitHub-LogicApps-MDTIMDEASM"
+                                                },
+                                                "method": "GET",
+                                                "uri": "https://graph.microsoft.com/v1.0/security/threatIntelligence/intelProfiles?$Search=\"@{items('For_each_5')}\""
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "Foreach"
+                                }
+                            },
+                            "runAfter": {
+                                "Article_Support_MDTI": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Scope"
+                        },
+                        "Reputational_Scoring_for_MDTI_": {
+                            "actions": {
+                                "Create_HTML_table": {
+                                    "runAfter": {
+                                        "For_each_2": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Table",
+                                    "inputs": {
+                                        "format": "HTML",
+                                        "from": "@variables('Domainreputation')"
+                                    }
+                                },
+                                "For_each_2": {
+                                    "foreach": "@variables('domainList')",
+                                    "actions": {
+                                        "Condition_2": {
+                                            "actions": {
+                                                "Append_to_array_variable_2": {
+                                                    "runAfter": {
+                                                        "Compose_2": [
+                                                            "Succeeded"
+                                                        ]
+                                                    },
+                                                    "type": "AppendToArrayVariable",
+                                                    "inputs": {
+                                                        "name": "Domainreputation",
+                                                        "value": {
+                                                            "Classification": "@{body('Parse_JSON_2')?['classification']}",
+                                                            "Domains": "@{items('For_each_2')}",
+                                                            "Score": "@{body('Parse_JSON_2')?['score']}"
+                                                        }
+                                                    }
+                                                },
+                                                "Compose_2": {
+                                                    "runAfter": {},
+                                                    "type": "Compose",
+                                                    "inputs": {
+                                                        "Classification": "@{body('Parse_JSON_2')?['classification']}",
+                                                        "Domains": "@{items('For_each_2')}",
+                                                        "Rules": "@{body('Parse_JSON_2')?['rules']}",
+                                                        "Score": "@{body('Parse_JSON_2')?['score']}"
+                                                    }
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Parse_JSON_2": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "greaterOrEquals": [
+                                                            "@body('Parse_JSON_2')?['score']",
+                                                            "@parameters('Score')"
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "type": "If"
+                                        },
+                                        "Get_Reputational_Scoring_for_Domain_list_identified_by_MDTI": {
+                                            "runAfter": {},
+                                            "type": "Http",
+                                            "inputs": {
+                                                "authentication": {
+                                                    "audience": "https://graph.microsoft.com",
+                                                    "clientId": "@parameters('ClientIdMDTI')",
+                                                    "secret": "@parameters('ClientSecretMDTI')",
+                                                    "tenant": "@parameters('TenantId')",
+                                                    "type": "ActiveDirectoryOAuth"
+                                                },
+                                                "headers": {
+                                                    "User-Agent": "GitHub-LogicApps-MDTIMDEASM"
+                                                },
+                                                "method": "GET",
+                                                "uri": "https://graph.microsoft.com/v1.0/security/threatIntelligence/hosts('@{items('For_each_2')}')/reputation"
+                                            }
+                                        },
+                                        "Parse_JSON_2": {
+                                            "runAfter": {
+                                                "Get_Reputational_Scoring_for_Domain_list_identified_by_MDTI": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ParseJson",
+                                            "inputs": {
+                                                "content": "@body('Get_Reputational_Scoring_for_Domain_list_identified_by_MDTI')",
+                                                "schema": {
+                                                    "properties": {
+                                                        "@@odata.context": {
+                                                            "type": "string"
+                                                        },
+                                                        "classification": {
+                                                            "type": "string"
+                                                        },
+                                                        "id": {
+                                                            "type": "string"
+                                                        },
+                                                        "rules": {
+                                                            "type": "array"
+                                                        },
+                                                        "score": {
+                                                            "type": "integer"
+                                                        }
+                                                    },
+                                                    "type": "object"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "Foreach"
+                                }
+                            },
+                            "runAfter": {
+                                "Intel_profile_View_MDTI": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Scope"
+                        },
+                        "Send_an_email_(V2)_2": {
+                            "runAfter": {
+                                "Reputational_Scoring_for_MDTI_": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "ApiConnection",
+                            "inputs": {
+                                "body": {
+                                    "Body": "<p><span style=\"font-family: tahoma\"><u><strong>EASM DISOVERED DOMAINS REPORT<br>\n</strong></u></span><span style=\"font-family: tahoma\"><br>\n<br>\nEASM Workspace : &nbsp;</span><span style=\"font-family: tahoma\">@{parameters('EASMWorkspaceName')}</span><span style=\"font-family: tahoma\"><br>\n<br>\nKeywords Identification in Microsoft Defender Threat Intelligence Articles<br>\n</span><span style=\"font-family: tahoma\">@{body('Create_HTML_table_2')}</span><span style=\"font-family: tahoma\"><br>\n<br>\nKeywords Identification in Microsoft Defender Threat Intelligence Intel Profiles<br>\n</span><span style=\"font-family: tahoma\">@{body('Create_HTML_table_3')}</span><span style=\"font-family: tahoma\"><br>\n</span><span style=\"font-family: tahoma\"><u><strong><br>\n</strong></u></span><span style=\"font-family: tahoma\">Discovered Domains Reputation Scoring</span><span style=\"font-family: tahoma\"><u><br>\n</u></span><span style=\"font-family: tahoma\"></span><span style=\"font-family: tahoma\">@{body('Create_HTML_table')}</span><span style=\"font-family: tahoma\"><br>\n</span><span style=\"font-family: tahoma\"><strong><br>\n</strong></span></p>",
+                                    "Importance": "Normal",
+                                    "Subject": "EASM Disovered Domains ",
+                                    "To": "@parameters('ToEmail')"
+                                },
+                                "host": {
+                                    "connection": {
+                                        "name": "@parameters('$connections')['office365']['connectionId']"
+                                    }
+                                },
+                                "method": "post",
+                                "path": "/v2/Mail"
+                            }
+                        },
+                        "Until": {
+                            "actions": {
+                                "Compose": {
+                                    "runAfter": {
+                                        "Parse_Top_level_": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Compose",
+                                    "inputs": "@body('Parse_Top_level_')?['mark']"
+                                },
+                                "For_each": {
+                                    "foreach": "@body('Parse_JSON')",
+                                    "actions": {
+                                        "Append_to_Domain_Array": {
+                                            "runAfter": {},
+                                            "type": "AppendToArrayVariable",
+                                            "inputs": {
+                                                "name": "domainList",
+                                                "value": "@items('For_each')['name']"
+                                            }
+                                        },
+                                        "Append_to_keyword_array": {
+                                            "runAfter": {
+                                                "Append_to_Domain_Array": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "AppendToArrayVariable",
+                                            "inputs": {
+                                                "name": "keyword_list",
+                                                "value": "@replace(split(items('For_each')['name'], '.')[0], '-','')"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Parse_JSON": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Foreach"
+                                },
+                                "Parse_JSON": {
+                                    "runAfter": {
+                                        "Set_variable": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Parse_Top_level_')?['content']",
+                                        "schema": {
+                                            "items": {
+                                                "properties": {
+                                                    "asset": {
+                                                        "properties": {},
+                                                        "type": "object"
+                                                    },
+                                                    "auditTrail": {
+                                                        "type": "array"
+                                                    },
+                                                    "createdDate": {
+                                                        "type": "string"
+                                                    },
+                                                    "discoGroupName": {},
+                                                    "displayName": {
+                                                        "type": "string"
+                                                    },
+                                                    "externalId": {},
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "kind": {
+                                                        "type": "string"
+                                                    },
+                                                    "labels": {
+                                                        "type": "array"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {},
+                                                    "state": {
+                                                        "type": "string"
+                                                    },
+                                                    "updatedDate": {
+                                                        "type": "string"
+                                                    },
+                                                    "uuid": {
+                                                        "type": "string"
+                                                    },
+                                                    "wildcard": {
+                                                        "type": "boolean"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "name",
+                                                    "displayName",
+                                                    "kind",
+                                                    "uuid",
+                                                    "asset",
+                                                    "createdDate",
+                                                    "updatedDate",
+                                                    "state",
+                                                    "externalId",
+                                                    "labels",
+                                                    "wildcard",
+                                                    "discoGroupName",
+                                                    "auditTrail",
+                                                    "reason"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        }
+                                    }
+                                },
+                                "Parse_Top_level_": {
+                                    "runAfter": {
+                                        "Scheduled_Query_to_EASM": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ParseJson",
+                                    "inputs": {
+                                        "content": "@body('Scheduled_Query_to_EASM')",
+                                        "schema": {
+                                            "properties": {
+                                                "content": {
+                                                    "type": "array"
+                                                },
+                                                "first": {
+                                                    "type": "boolean"
+                                                },
+                                                "last": {
+                                                    "type": "boolean"
+                                                },
+                                                "mark": {
+                                                    "type": "string"
+                                                },
+                                                "nextLink": {
+                                                    "type": "string"
+                                                },
+                                                "number": {
+                                                    "type": "integer"
+                                                },
+                                                "numberOfElements": {
+                                                    "type": "integer"
+                                                },
+                                                "size": {
+                                                    "type": "integer"
+                                                },
+                                                "totalElements": {
+                                                    "type": "integer"
+                                                },
+                                                "totalPages": {
+                                                    "type": "integer"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    }
+                                },
+                                "Scheduled_Query_to_EASM": {
+                                    "runAfter": {},
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://easm.defender.microsoft.com/",
+                                            "clientId": "@parameters('ClientIdMDEASM')",
+                                            "secret": "@parameters('ClientSecretMDEASM')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-LogicApps-MDTIMDEASM"
+                                        },
+                                        "method": "GET",
+                                        "queries": {
+                                            "api-version": "@parameters('api-version')",
+                                            "filter": "@parameters('filter')",
+                                            "mark": "@variables('mark')",
+                                            "maxpagesize": "@parameters('maxpagesize')"
+                                        },
+                                        "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                                    }
+                                },
+                                "Set_variable": {
+                                    "runAfter": {
+                                        "Compose": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "SetVariable",
+                                    "inputs": {
+                                        "name": "mark",
+                                        "value": "@{outputs('Compose')}"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_variable_keyword_array": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "expression": "@equals(body('Parse_Top_level_')?['last'], true)",
+                            "limit": {
+                                "count": 60,
+                                "timeout": "PT1H"
+                            },
+                            "type": "Until"
+                        },
+                        "lookbacktime": {
+                            "runAfter": {
+                                "Days": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "time",
+                                        "type": "string",
+                                        "value": "@{addDays(utcNow(),int(concat('-',variables('Days'))))}"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "office365": {
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('Office365ConnectionName'))]",
+                                "connectionName": "[variables('Office365ConnectionName')]",
+                                "id": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Web/locations/', resourceGroup().location, '/managedApis/office365')]"
+                            }
+                        }
+                    }
+                }
+                
+            }
+        }
+    ]
+}
