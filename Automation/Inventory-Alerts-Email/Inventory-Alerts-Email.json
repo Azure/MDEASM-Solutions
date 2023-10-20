@@ -341,9 +341,7 @@
                                             "externalId",
                                             "labels",
                                             "wildcard",
-                                            "discoGroupName",
-                                            "auditTrail",
-                                            "reason"
+                                            "discoGroupName"
                                         ],
                                         "type": "object"
                                     },
