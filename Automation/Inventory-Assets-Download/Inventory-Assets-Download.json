@@ -106,7 +106,7 @@
                         },
                         "ClientSecret": {
                             "defaultValue": "Client-Secret",
-                            "type": "String"
+                            "type": "SecureString"
                         },
                         "EASMWorkspaceName": {
                             "defaultValue": "workSpaceName",
