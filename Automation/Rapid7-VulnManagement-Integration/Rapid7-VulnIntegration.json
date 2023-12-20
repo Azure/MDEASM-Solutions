@@ -1,0 +1,648 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+	"metadata": {
+		"comments": "Automation: Azure Logic App process to integrate MDEASM Inventory Host IP Addresses with Rapid7 InsightVM Vulnerability Management Tool using a predefined/custom Inventory query and also label the Assets in Inventory selected for Rapid7 InsightVM Vuln scanning.",
+		"author": "MD EASM Go-To-Production (GTP) Customer Experience Engineering (CxE) Team. Email: mdeasm_cxe@microsoft.com"
+	},
+    "parameters": {
+        "workflows_Rapid7_InsightVM_VulnIntegration_name": {
+            "defaultValue": "Rapid7-InsightVM-VulnIntegration",
+            "type": "String"
+        },
+		"ClientId": {
+			"defaultValue": "Client-ID",
+			"type": "String"
+		},
+		"ClientSecret": {
+			"defaultValue": "Client-Secret",
+			"type": "SecureString"
+		},
+		"EASMWorkspaceName": {
+			"defaultValue": "WorkspaceName",
+			"type": "String"
+		},
+		"RunFrequency": {
+			"defaultValue": 86400,
+			"type": "Int"
+		},
+		"api-version": {
+			"defaultValue": "2022-11-01-preview",
+			"type": "String"
+		},
+		"LabelName": {
+			"defaultValue": "InRapid7",
+			"type": "String"
+		},
+		"filter": {
+			"defaultValue": "state=\"confirmed\" and kind=\"host\" and ipAddress !empty and ipv4=true",
+			"type": "String"
+		},
+		"maxpagesize": {
+			"defaultValue": "400",
+			"type": "String"
+		},
+		"Rapid7-Username": {
+			"defaultValue": "Rapid7-Username",
+			"type": "String"
+		},
+		"Rapid7-Password": {
+			"defaultValue": "Rapid7-Password",
+			"type": "SecureString"
+		},
+        "Rapid7-Hostname": {
+            "defaultValue": "hostname",
+            "type": "String"
+                },
+        "Rapid7-HostPort": {
+            "defaultValue": 3780,
+            "type": "Int"
+                }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.Logic/workflows",
+            "apiVersion": "2017-07-01",
+            "name": "[parameters('workflows_Rapid7_InsightVM_VulnIntegration_name')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "state": "Enabled",
+                "definition": {
+                    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+                    "contentVersion": "1.0.0.0",
+                    "parameters": {
+                        "ClientId": {
+                            "defaultValue": "Client-ID",
+                            "type": "String"
+                        },
+                        "ClientSecret": {
+                            "defaultValue": "Client-Secret",
+                            "type": "SecureString"
+                        },
+                        "EASMWorkspaceName": {
+                            "defaultValue": "workSpaceName",
+                            "type": "String"
+                        },
+                        "LabelName": {
+                            "defaultValue": "InRapid7",
+                            "type": "String"
+                        },
+                        "Rapid7-HostPort": {
+                            "defaultValue": 3780,
+                            "type": "Int"
+                        },
+                        "Rapid7-Hostname": {
+                            "defaultValue": "hostname",
+                            "type": "String"
+                        },
+                        "Rapid7-Password": {
+                            "defaultValue": "Rapid7-Password",
+                            "type": "SecureString"
+                        },
+                        "Rapid7-Username": {
+                            "defaultValue": "Rapid7-Username",
+                            "type": "String"
+                        },
+                        "Region": {
+                            "defaultValue": "[resourceGroup().location]",
+                            "type": "String"
+                        },
+                        "ResourceGroupName": {
+                            "defaultValue": "[resourceGroup().name]",
+                            "type": "String"
+                        },
+                        "RunFrequency": {
+                            "defaultValue": 86400,
+                            "type": "Int"
+                        },
+                        "SubscriptionId": {
+                            "defaultValue": "[subscription().subscriptionId]",
+                            "type": "String"
+                        },
+                        "TenantId": {
+                            "defaultValue": "[subscription().tenantId]",
+                            "type": "String"
+                        },
+                        "api-version": {
+                            "defaultValue": "2022-11-01-preview",
+                            "type": "String"
+                        },
+                        "filter": {
+                            "defaultValue": "state=\"confirmed\" and kind=\"host\" and ipAddress !empty and ipv4=true",
+                            "type": "String"
+                        },
+                        "maxpagesize": {
+                            "defaultValue": "400",
+                            "type": "String"
+                        }
+                    },
+                    "triggers": {
+                        "Scheduled_Query_to_EASM": {
+                            "recurrence": {
+                                "frequency": "Second",
+                                "interval": "@parameters('RunFrequency')"
+                            },
+                            "evaluatedRecurrence": {
+                                "frequency": "Second",
+                                "interval": 86400
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "audience": "https://easm.defender.microsoft.com/",
+                                    "clientId": "@parameters('ClientId')",
+                                    "secret": "@parameters('ClientSecret')",
+                                    "tenant": "@parameters('TenantId')",
+                                    "type": "ActiveDirectoryOAuth"
+                                },
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "User-Agent": "GitHub-Rapid7-InsightVM"
+                                },
+                                "method": "GET",
+                                "queries": {
+                                    "api-version": "@parameters('api-version')",
+                                    "filter": "@{parameters('filter')} and label != @{parameters('LabelName')}",
+                                    "mark": "*",
+                                    "maxpagesize": "@parameters('maxpagesize')",
+                                    "recentOnly": "true",
+                                    "responseType": "reduced"
+                                },
+                                "retryPolicy": {
+                                    "count": 6,
+                                    "interval": "PT20S",
+                                    "type": "fixed"
+                                },
+                                "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                            },
+                            "conditions": [
+                                {
+                                    "expression": "@greater(triggerBody()?.totalElements,0)"
+                                }
+                            ],
+                            "runtimeConfiguration": {
+                                "concurrency": {
+                                    "runs": 1
+                                }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Condition": {
+                            "actions": {
+                                "Create_Label": {
+                                    "runAfter": {},
+                                    "limit": {
+                                        "timeout": "PT90S"
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://management.core.windows.net/",
+                                            "clientId": "@parameters('ClientId')",
+                                            "secret": "@parameters('ClientSecret')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "body": {},
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-Rapid7-InsightVM"
+                                        },
+                                        "method": "PUT",
+                                        "queries": {
+                                            "api-version": "2022-04-01-preview"
+                                        },
+                                        "retryPolicy": {
+                                            "count": 10,
+                                            "interval": "PT20S",
+                                            "type": "fixed"
+                                        },
+                                        "uri": "https://management.azure.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups@{parameters('ResourceGroupName')}/providers/Microsoft.Easm/workspaces/@{parameters('EASMWorkspaceName')}/labels/@{parameters('LabelName')}"
+                                    }
+                                },
+                                "Update_Assets": {
+                                    "runAfter": {
+                                        "Create_Label": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "limit": {
+                                        "timeout": "PT90S"
+                                    },
+                                    "type": "Http",
+                                    "inputs": {
+                                        "authentication": {
+                                            "audience": "https://easm.defender.microsoft.com/",
+                                            "clientId": "@parameters('ClientId')",
+                                            "secret": "@parameters('ClientSecret')",
+                                            "tenant": "@parameters('TenantId')",
+                                            "type": "ActiveDirectoryOAuth"
+                                        },
+                                        "body": {
+                                            "labels": {
+                                                "@{parameters('LabelName')}": true
+                                            }
+                                        },
+                                        "headers": {
+                                            "Content-Type": "application/json",
+                                            "User-Agent": "GitHub-Rapid7-InsightVM"
+                                        },
+                                        "method": "PATCH",
+                                        "queries": {
+                                            "api-version": "@parameters('api-version')",
+                                            "filter": "name in (\"@{body('Join')}\")"
+                                        },
+                                        "retryPolicy": {
+                                            "count": 10,
+                                            "interval": "PT20S",
+                                            "type": "fixed"
+                                        },
+                                        "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                                    }
+                                }
+                            },
+                            "runAfter": {
+                                "Update_EASM_Asset": [
+                                    "Failed",
+                                    "TimedOut"
+                                ]
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "equals": [
+                                            "@outputs('Update_EASM_Asset')['statusCode']",
+                                            400
+                                        ]
+                                    }
+                                ]
+                            },
+                            "type": "If",
+                            "description": "If label does not exist, this path creates it and then updates assets with newly created label"
+                        },
+                        "For_each_Host_asset": {
+                            "foreach": "@body('Parse_JSON')?['content']",
+                            "actions": {
+                                "loop_through_IP_Array": {
+                                    "foreach": "@items('For_each_Host_asset')['asset']['ipAddresses']",
+                                    "actions": {
+                                        "Append_to_Host_IP_array_variable": {
+                                            "runAfter": {},
+                                            "type": "AppendToArrayVariable",
+                                            "inputs": {
+                                                "name": "Host IP",
+                                                "value": "@items('loop_through_IP_Array')?['value']"
+                                            }
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "Foreach"
+                                }
+                            },
+                            "runAfter": {
+                                "Initialize_Host_IP_Var": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Foreach"
+                        },
+                        "Initialize_Host_IP_Var": {
+                            "runAfter": {
+                                "Parse_JSON": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "Host IP",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Initialize_deduplicate_Host_IP_variable": {
+                            "runAfter": {
+                                "For_each_Host_asset": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable",
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "finalIP",
+                                        "type": "array"
+                                    }
+                                ]
+                            }
+                        },
+                        "Join": {
+                            "runAfter": {
+                                "Set_deduplicate_Host_IP_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "Join",
+                            "inputs": {
+                                "from": "@union(variables('finalIP'), variables('finalIP'))",
+                                "joinWith": "\"},{\"ip\":\""
+                            }
+                        },
+                        "Parse_JSON": {
+                            "runAfter": {},
+                            "type": "ParseJson",
+                            "inputs": {
+                                "content": "@triggerBody()",
+                                "schema": {
+                                    "properties": {
+                                        "content": {
+                                            "items": {
+                                                "properties": {
+                                                    "asset": {
+                                                        "properties": {
+                                                            "domain": {
+                                                                "type": "string"
+                                                            },
+                                                            "host": {
+                                                                "type": "string"
+                                                            },
+                                                            "ipAddresses": {
+                                                                "items": {
+                                                                    "properties": {
+                                                                        "firstSeen": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "lastSeen": {
+                                                                            "type": "string"
+                                                                        },
+                                                                        "recent": {
+                                                                            "type": "boolean"
+                                                                        },
+                                                                        "sources": {
+                                                                            "type": "array"
+                                                                        },
+                                                                        "value": {
+                                                                            "type": "string"
+                                                                        }
+                                                                    },
+                                                                    "required": [
+                                                                        "value"
+                                                                    ],
+                                                                    "type": "object"
+                                                                },
+                                                                "type": "array"
+                                                            }
+                                                        },
+                                                        "type": "object"
+                                                    },
+                                                    "auditTrail": {
+                                                        "items": {
+                                                            "properties": {
+                                                                "displayName": {},
+                                                                "id": {},
+                                                                "kind": {
+                                                                    "type": "string"
+                                                                },
+                                                                "name": {
+                                                                    "type": "string"
+                                                                },
+                                                                "reason": {}
+                                                            },
+                                                            "required": [
+                                                                "id",
+                                                                "name",
+                                                                "displayName",
+                                                                "kind",
+                                                                "reason"
+                                                            ],
+                                                            "type": "object"
+                                                        },
+                                                        "type": "array"
+                                                    },
+                                                    "createdDate": {
+                                                        "type": "string"
+                                                    },
+                                                    "discoGroupName": {
+                                                        "type": "string"
+                                                    },
+                                                    "displayName": {
+                                                        "type": "string"
+                                                    },
+                                                    "externalId": {},
+                                                    "id": {
+                                                        "type": "string"
+                                                    },
+                                                    "kind": {
+                                                        "type": "string"
+                                                    },
+                                                    "labels": {
+                                                        "type": "array"
+                                                    },
+                                                    "name": {
+                                                        "type": "string"
+                                                    },
+                                                    "reason": {},
+                                                    "state": {
+                                                        "type": "string"
+                                                    },
+                                                    "updatedDate": {
+                                                        "type": "string"
+                                                    },
+                                                    "uuid": {
+                                                        "type": "string"
+                                                    },
+                                                    "wildcard": {
+                                                        "type": "boolean"
+                                                    }
+                                                },
+                                                "required": [
+                                                    "id",
+                                                    "name",
+                                                    "displayName",
+                                                    "kind",
+                                                    "uuid",
+                                                    "asset",
+                                                    "createdDate",
+                                                    "updatedDate",
+                                                    "state",
+                                                    "externalId",
+                                                    "labels",
+                                                    "wildcard",
+                                                    "discoGroupName",
+                                                    "auditTrail",
+                                                    "reason"
+                                                ],
+                                                "type": "object"
+                                            },
+                                            "type": "array"
+                                        },
+                                        "first": {
+                                            "type": "boolean"
+                                        },
+                                        "last": {
+                                            "type": "boolean"
+                                        },
+                                        "mark": {
+                                            "type": "string"
+                                        },
+                                        "number": {
+                                            "type": "integer"
+                                        },
+                                        "numberOfElements": {
+                                            "type": "integer"
+                                        },
+                                        "size": {
+                                            "type": "integer"
+                                        },
+                                        "totalElements": {
+                                            "type": "integer"
+                                        },
+                                        "totalPages": {
+                                            "type": "integer"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        },
+                        "Send_to_Rapid7_InsightVM": {
+                            "runAfter": {
+                                "Join": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "limit": {
+                                "timeout": "PT60S"
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "password": "@parameters('Rapid7-Password')",
+                                    "type": "Basic",
+                                    "username": "@parameters('Rapid7-Username')"
+                                },
+                                "body": {
+                                    "addresses": [
+                                        {
+                                            "ip": "@{body('Join')}"
+                                        }
+                                    ],
+                                    "date": "@{formatDateTime(utcNow(), 'yyyy-MM-dd')}"
+                                },
+                                "headers": {
+                                    "Content-Type": "application/json"
+                                },
+                                "method": "POST",
+                                "retryPolicy": {
+                                    "count": 10,
+                                    "interval": "PT20S",
+                                    "type": "fixed"
+                                },
+                                "uri": "https://@{parameters('Rapid7-Hostname')}:@{parameters('Rapid7-HostPort')}/api/3/sites/@{body('Parse_JSON')?['totalElements']}/assets"
+                            }
+                        },
+                        "Set_deduplicate_Host_IP_variable": {
+                            "runAfter": {
+                                "Initialize_deduplicate_Host_IP_variable": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "SetVariable",
+                            "inputs": {
+                                "name": "finalIP",
+                                "value": "@variables('Host IP')"
+                            }
+                        },
+                        "Update_EASM_Asset": {
+                            "runAfter": {
+                                "Send_to_Rapid7_InsightVM": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "limit": {
+                                "timeout": "PT90S"
+                            },
+                            "type": "Http",
+                            "inputs": {
+                                "authentication": {
+                                    "audience": "https://easm.defender.microsoft.com/",
+                                    "clientId": "@parameters('ClientId')",
+                                    "secret": "@parameters('ClientSecret')",
+                                    "tenant": "@parameters('TenantId')",
+                                    "type": "ActiveDirectoryOAuth"
+                                },
+                                "body": {
+                                    "labels": {
+                                        "@{parameters('LabelName')}": true
+                                    },
+                                    "transfers": [
+                                        "host"
+                                    ]
+                                },
+                                "headers": {
+                                    "Content-Type": "application/json",
+                                    "User-Agent": "GitHub-Rapid7-InsightVM"
+                                },
+                                "method": "PATCH",
+                                "queries": {
+                                    "api-version": "@parameters('api-version')",
+                                    "filter": "name in (\"@{body('Join')}\")"
+                                },
+                                "retryPolicy": {
+                                    "count": 10,
+                                    "interval": "PT20S",
+                                    "type": "fixed"
+                                },
+                                "uri": "https://@{parameters('Region')}.easm.defender.microsoft.com/subscriptions/@{parameters('SubscriptionId')}/resourceGroups/@{parameters('ResourceGroupName')}/workspaces/@{parameters('EASMWorkspaceName')}/assets"
+                            },
+                            "description": "Update Alerted EASM Assets with a label to track history "
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "ClientId": {
+                        "value": "[parameters('ClientId')]"
+                    },
+                    "ClientSecret": {
+			"value": "[parameters('ClientSecret')]"
+		    },
+                    "EASMWorkspaceName": {
+                        "value": "[parameters('EASMWorkspaceName')]"
+                    },
+                    "LabelName": {
+                        "value": "[parameters('LabelName')]"
+                    },
+                    "Rapid7-Password": {
+		    	"value": "[parameters('Rapid7-Password')]"
+		    },
+                    "Rapid7-Username": {
+                        "value": "[parameters('Rapid7-Username')]"
+                    },
+                    "RunFrequency": {
+                        "value": "[parameters('RunFrequency')]"
+                    },
+                    "api-version": {
+                        "value": "[parameters('api-version')]"
+                    },
+                    "filter": {
+                        "value": "[parameters('filter')]"
+                    },
+                    "maxpagesize": {
+                        "value": "[parameters('maxpagesize')]"
+                    },
+                    "Rapid7-Hostname": {
+                        "value": "[parameters('Rapid7-Hostname')]"
+                    },
+                    "Rapid7-HostPort": {
+                        "value": "[parameters('Rapid7-HostPort')]"
+                    }
+                }
+            }
+        }
+    ]
+}
