@@ -481,7 +481,7 @@
 									],
 									"Body": "<p>Hi,<br>\n<br>\nMDEASM detected  Assets in your Inventory matching your monitoring query,<br>\n@{parameters('filter')}<br>\n<br>\nPlease check your EASM Inventory for individual Asset details found in this alert.<br>\nAlso, attached is list of these assets for your reference in CSV format. <br>\n<br>\n---<br>\nThanks for using MDEASM Alerts&nbsp;</p>",
 									"Importance": "Normal",
-									"Subject": "MDEASM Alert:  Assets detected matching your monitoring query",
+									"Subject": "MDEASM Alert: @body('Scheduled_Query_to_EASM')?['totalElements'] Assets detected matching your monitoring query",
 									"To": "TestEmail@test.com"
 								},
 								"host": {
