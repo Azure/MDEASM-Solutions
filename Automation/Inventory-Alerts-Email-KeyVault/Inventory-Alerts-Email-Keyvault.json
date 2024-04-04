@@ -133,7 +133,7 @@
 							"type": "String"
 						},
 						"Region": {
-							"defaultValue": "southcentralus",
+							"defaultValue": "eastus",
 							"type": "String",
 							"allowedValues": [
 								"southcentralus",
@@ -571,11 +571,14 @@
 						"value": "[parameters('api-version')]"
 					},
 					"filter": {
-						"value": "state=\"confirmed\" and type=\"host\""
+						"value": "[parameters('filter')]"
+					},
+					"Region": {
+						"value": "[parameters('Region')]"
 					},
 					"maxpagesize": {
 						"value": "[parameters('maxpagesize')]"
-					}
+					}	
 				}
 			}
 		}
